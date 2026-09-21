@@ -1,0 +1,83 @@
+# ReFxRCON, production. Differs from the repository's docker-compose.yml in three ways that
+# matter, all of them deliberate:
+#
+#   1. No `ports:` mapping on the app. The repo's compose publishes 3000 on every interface,
+#      which is right for a laptop and wrong for a VPS: a firewall rule is then the only thing
+#      between the internet and an unencrypted origin that trusts X-Forwarded-For. Here the app
+#      is reachable only from the `web` network, and Caddy is the only member of it.
+#   2. The database has no published port either. It never needed one.
+#   3. Caddy runs in the same project, so `reverse_proxy refxrcon:3000` resolves by service name.
+#      If you would rather run Caddy on the host, drop the `caddy` service, add
+#      `ports: ['127.0.0.1:3000:3000']` to the app, and point the host Caddy at 127.0.0.1:3000.
+#
+#   cp docs/refx/docker-compose.prod.yml docker-compose.prod.yml
+#   cp docs/refx/env.production.example .env      # then fill it in
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# The app image is built from source here. That build peaks around 1.6 GB of RSS, which is why
+# Phase 0 asks for 4 GB: on a 2 GB box with no swap the OOM killer takes it, usually during
+# `vite build`, and the error you see is an unhelpful exit 137. To build elsewhere, push to a
+# registry and replace `build: .` with `image: ghcr.io/<you>/refxrcon:<tag>`.
+
+services:
+  refxrcon:
+    build: .
+    # image: ghcr.io/<you>/refxrcon:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: refxrcon
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      PGDATABASE: refxrcon
+      # ORIGIN, ADDRESS_HEADER, XFF_DEPTH, SETUP_TOKEN, ALLOW_DEMO_SERVER, ALLOW_ORG_SIGNUP,
+      # BETTER_AUTH_SECRET and ENCRYPTION_KEY all come from .env. Keep them there, not here:
+      # values written into this file end up in `docker inspect` and in git.
+    networks: [web, data]
+    # Deliberately no ports:. See the header.
+
+  db:
+    image: timescale/timescaledb:2.30.0-pg18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: refxrcon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: refxrcon
+    volumes:
+      # PostgreSQL 18+ images keep data in a versioned subdirectory of this path.
+      - refxrcon-db:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U refxrcon -d refxrcon']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [data]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [refxrcon]
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # certificates and ACME account. Losing this means re-issuing.
+      - caddy-config:/config
+    networks: [web]
+
+networks:
+  # Caddy and the app. The database is not on it.
+  web:
+  # The app and the database. Caddy is not on it.
+  data:
+
+volumes:
+  refxrcon-db:
+  caddy-data:
+  caddy-config:

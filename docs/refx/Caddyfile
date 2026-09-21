@@ -1,0 +1,70 @@
+# ReFxRCON behind Caddy.
+#
+#   cp docs/refx/Caddyfile /etc/caddy/Caddyfile
+#   sed -i 's/stats.refx.gg/<your-hostname>/' /etc/caddy/Caddyfile
+#   caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+#
+# Caddy obtains and renews the certificate itself, and redirects HTTP to HTTPS without being
+# asked. There is deliberately no `http://` block: adding one is how people accidentally serve
+# the panel in cleartext.
+#
+# The hostname here MUST equal ORIGIN in .env, exactly. parseOrigin() requires
+# `new URL(raw).origin === raw`, and the app compares the request's Origin header against it on
+# every form post. A trailing slash, an explicit :443, or a different case of the host is a
+# startup failure or a 403 on every mutation, not a warning.
+
+stats.refx.gg {
+	encode zstd gzip
+
+	# The app listens on the Docker network only. If this line says 127.0.0.1 you are relying on
+	# the firewall to keep port 3000 private; if it says the container name you are relying on
+	# Docker's network, which is the stronger guarantee. Use the compose service name when Caddy
+	# runs in the same compose project, and 127.0.0.1:3000 when Caddy is on the host.
+	reverse_proxy 127.0.0.1:3000 {
+		# Caddy appends the immediate peer to X-Forwarded-For. With Caddy as the only proxy, the
+		# real client is therefore the LAST entry, which is what XFF_DEPTH=1 selects -- the app
+		# indexes from the end of the list, 1-based, not from the left.
+		#
+		# Put Cloudflare (or any other proxy) in front of this and the last entry becomes that
+		# proxy's edge address instead. Then either set XFF_DEPTH=2, or -- simpler and harder to
+		# get wrong -- set ADDRESS_HEADER=cf-connecting-ip, which is taken verbatim.
+		header_up X-Forwarded-For {http.request.remote.host}
+		header_up X-Forwarded-Proto {http.request.scheme}
+		header_up Host {host}
+
+		# Do NOT strip or allow-list request headers here. Every non-GET request to /api/* must
+		# carry `X-Requested-With: warcon` or hooks.server.ts:69-78 answers 403 with code 'csrf'.
+		# A proxy configured to pass only "known" headers breaks the entire JSON API, and the
+		# symptom -- every action failing, every page loading fine -- does not look like a proxy
+		# problem.
+
+		# The poller can hold a request open while it waits on a game server.
+		transport http {
+			read_timeout 120s
+		}
+	}
+
+	# HSTS. Only safe once the certificate is working; a year of browsers refusing plain HTTP to
+	# this hostname is not something to switch on speculatively. Leave it commented until the
+	# certificate has renewed at least once.
+	# header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+	# The app sets x-content-type-options, x-frame-options, referrer-policy and x-robots-tag on
+	# every response (src/hooks.server.ts:12-18). Do not set them here as well: two sources for
+	# one header is how it ends up weaker than either author intended.
+	#
+	# referrer-policy is deliberately `same-origin` and not `no-referrer` -- browsers send
+	# `Origin: null` on form posts under no-referrer, and SvelteKit rejects that as cross-site.
+	# Do not "harden" it here.
+	#
+	# It does NOT set a Content-Security-Policy. Adding one is a real improvement, but it is a
+	# change to make deliberately and test, not a line to paste in: the panel inlines SvelteKit's
+	# hydration data and would need a nonce or hash to keep working.
+
+	log {
+		output file /var/log/caddy/refxrcon.log {
+			roll_size 20MiB
+			roll_keep 10
+		}
+	}
+}

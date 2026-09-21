@@ -175,6 +175,16 @@ admin account that issued it. That is the only way to put moderators on a server
 handing each of them a credential that can replace the whole config. Do not weaken audit
 attribution for convenience.
 
+## Where things are written down
+
+- [`docs/refx/README.md`](docs/refx/README.md) — the index. Says which phases were actually
+  executed and which are runbooks that have never been run.
+- [`docs/refx/security.md`](docs/refx/security.md) — the posture, and D1.
+- [`docs/refx/rotation-retention.md`](docs/refx/rotation-retention.md) — what the retention
+  number means and what it does not.
+- [`branding/README.md`](branding/README.md) — the mark, the wordmark, and how to regenerate
+  both plus the app icons.
+
 ## Decision register
 
 Defaults apply if a decision is never made, so the build never stalls on one.
@@ -207,7 +217,7 @@ src/lib/components/  51 Svelte components, all token-styled
 src/routes/(app)/  authenticated panel
 src/routes/api/    JSON routes
 drizzle/           numbered SQL migrations, applied at startup
-docs/refx/         ReFx runbooks (phases 0/2/4), security posture
+docs/refx/         ReFx runbooks, security posture, deploy artifacts (start at its README)
 scripts/           smoke.sh (end-to-end), branding.ts (asset generator)
 ```
 
