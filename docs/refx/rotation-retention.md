@@ -10,8 +10,13 @@ The number feeds one decision: what to put in `RotationEntries`.
 - API: `GET /api/servers/{id}/rotation-retention?range=30d&by=map` (viewer role).
 - Code: `src/lib/server/rotation-retention.ts`. The statistics are a pure exported function,
   `scoreRotationRetention`, covered by `rotation-retention.test.ts`.
-- Reproduce by hand: `docs/refx/rotation-retention.sql` — a second, independent implementation
-  in SQL. It agrees with the panel to the cent.
+- Reproduce by hand: `docs/refx/rotation-retention.sql` — a second implementation in SQL. It
+  agrees with the panel to the cent. **What that agreement proves is narrower than it looks:**
+  it proves the data extraction and the arithmetic, not that the estimator is the right one,
+  because the same algorithm was written twice. That is not hypothetical — an earlier version of
+  both stopped the fit after three passes, and the two agreed perfectly on an answer that was
+  out by 0.8 players. What catches that is `rotation-retention.test.ts`, which scores fixtures
+  whose truth is known.
 
 ## How to read it
 
@@ -47,7 +52,7 @@ bars happen to be in.
 | Time of day | A map that rotates in at 3am always looks terrible | Matches are bucketed into weekend-flag × hour-of-day (48 buckets) and a slot effect is fitted |
 | Headroom | A full server cannot grow, so popular maps at peak look flat | Matches starting above 90% of `max_players` are excluded and counted |
 | Starting population | Rotation is ordered, so each map has a fixed predecessor and a systematically different start; population reverts toward its time-of-day norm, so a map following a popular one bleeds through reversion alone | The excess of `ccu_start` over the slot's own norm enters as a covariate |
-| The baseline containing the map being scored | **This one inverts answers** | Slot and map effects are fitted jointly, by back-fitting, rather than a slot average taken over the same rows being scored |
+| The baseline containing the map being scored | **This one inverts answers** | Slot and map effects are fitted jointly, by alternating least squares run **to convergence**, rather than a slot average taken over the same rows being scored |
 
 ### The one that inverts answers
 
@@ -73,6 +78,61 @@ inflated by more than half a player at the same time.
 
 `rotation-retention.test.ts` keeps both columns as a regression test, so the failure cannot
 come back quietly.
+
+### The fit has to actually converge
+
+The joint fit alternates: estimate the slot effects holding the map effects fixed, then the map
+effects holding the slot effects fixed, and repeat. How many times is not a detail.
+
+On a **balanced** design — every map appearing evenly across the clock — three passes is
+close enough, which is how a fixed pass count survives a plausible-looking test suite. On an
+**unbalanced** design, which every real rotation is, it is not. Measured on a fixture with known
+truth:
+
+| passes | map A (truth +0.50) | map B (truth −2.50) |
+| --- | --- | --- |
+| 3 | +1.30 | −3.37 |
+| 10 | +0.40 | −2.11 |
+| 25 | **+0.55** | **−2.26** |
+| 500 | +0.55 | −2.26 |
+
+At three passes map A is out by 0.8 players — larger than most of the differences the panel
+exists to show, and in the direction that would have you rotate a fine map out. It settles
+around forty. The implementation iterates to a tolerance with a 500-pass cap, and the cap is a
+backstop, not the count.
+
+### Some maps cannot be scored at all
+
+The fit identifies a map only **relative to maps it shares time slots with**, directly or
+transitively. A map that only ever runs at 04:00, and is the only thing that runs at 04:00, has
+its own effect and the time-of-day effect perfectly confounded — the fit can attribute all of it
+to either, and the answer it lands on is arbitrary. On a fixture, such a map came out at exactly
+0.00 against a true effect of +0.50, with nothing to indicate anything was wrong.
+
+So the panel computes the connected components of the map/slot graph and withholds a number from
+anything outside the largest one. Each withheld map carries a reason:
+
+| `withheld` | Meaning |
+| --- | --- |
+| `too-few-matches` | Under the 20-match threshold |
+| `not-comparable` | Never shares a time slot with another scoreable map |
+| `nothing-to-compare-with` | Fewer than two scoreable maps; a rotation of one has nothing to be above or below |
+
+The last one matters more than it sounds: with a single scoreable map its residual is **zero by
+construction**, because the reference is the mean over scoreable maps and it is the only one.
+Publishing 0.00 with an interval would read as "measured, and neutral".
+
+### `se: null` means not estimable, not small
+
+Standard errors are clustered by day. A map whose matches all fall on **one** calendar day gives
+one cluster, and one cluster carries no information about spread. The arithmetic says so if you
+let it: the single cluster's centred sum is exactly zero, so the standard error comes out 0 and
+`t(0)` is infinite, whose product is `NaN`.
+
+Reporting `se: 0` would be the worse failure — a claim of infinite precision from one evening's
+play. So `se`, `lo95` and `hi95` are all `null`, the residual is still shown, and the chart
+labels the row **no interval** rather than drawing a zero-width tick that would read as
+certainty. `residual` non-null with `se` null is a legitimate, expected combination.
 
 ## Confidence, and the null test
 

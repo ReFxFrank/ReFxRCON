@@ -102,7 +102,9 @@ function page(svg: string, width: number, height: number, art: number, backgroun
 	const bg = background ?? 'transparent';
 	return `data:text/html;charset=utf-8,${encodeURIComponent(
 		`<!doctype html><html><body style="margin:0;width:${width}px;height:${height}px;background:${bg};display:flex;align-items:center;justify-content:center">` +
-			`<div style="width:${art}px;line-height:0">${svg.replace(/width="\d+"\s+height="\d+"/, 'width="100%" height="auto"')}</div>` +
+			// [\d.]+ and not \d+: the stacked lockups carry a fractional height (202.4), and an
+			// integer-only pattern left them at their intrinsic 260px inside a 1024px canvas.
+			`<div style="width:${art}px;line-height:0">${svg.replace(/width="[\d.]+"\s+height="[\d.]+"/, 'width="100%" height="auto"')}</div>` +
 			`</body></html>`
 	)}`;
 }

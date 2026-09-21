@@ -10,8 +10,8 @@
  *
  *   DATABASE_URL=postgres://... bun run scripts/seed-rotation-retention.ts <server-id> [days]
  *
- * It refuses to run against a server that already has samples, so it cannot quietly corrupt a
- * live one. Undo with:
+ * It refuses to run against a server that already holds samples OR matches, so it cannot
+ * quietly corrupt a live one. Undo with:
  *   DELETE FROM samples WHERE server_id = '<id>'; DELETE FROM matches WHERE server_id = '<id>';
  */
 import { SQL } from 'bun';
@@ -22,6 +22,11 @@ if (!serverId) {
 	process.exit(1);
 }
 const DAYS = Number(daysArg ?? 30);
+if (!Number.isFinite(DAYS) || DAYS <= 0) {
+	// Without this a typo seeds nothing and exits 0, which reads as success.
+	console.error(`days must be a positive number, got ${JSON.stringify(daysArg)}`);
+	process.exit(1);
+}
 const url = process.env.DATABASE_URL;
 if (!url) {
 	console.error('DATABASE_URL is not set.');
@@ -66,11 +71,14 @@ const slotEffect = (hour: number) =>
 
 const client = new SQL(url, { max: 4 });
 
-const [{ n: existing }] =
-	await client`SELECT COUNT(*)::int AS n FROM samples WHERE server_id = ${serverId}`;
-if (existing > 0) {
+// Samples are pruned at 90 days and matches at 365, so a real server that has been quiet for a
+// season holds matches and no samples at all. Counting only samples would wave that through.
+const [{ n: existing }] = await client`
+	SELECT (SELECT COUNT(*) FROM samples WHERE server_id = ${serverId})
+	     + (SELECT COUNT(*) FROM matches WHERE server_id = ${serverId}) AS n`;
+if (Number(existing) > 0) {
 	console.error(
-		`server ${serverId} already has ${existing} samples. Refusing to mix synthetic data into it.`
+		`server ${serverId} already holds ${existing} samples/matches. Refusing to mix synthetic data into it.`
 	);
 	process.exit(1);
 }

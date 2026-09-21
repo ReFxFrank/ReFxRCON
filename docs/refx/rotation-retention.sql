@@ -1,34 +1,50 @@
 -- Rotation retention, as SQL.
 --
--- This is a SECOND, INDEPENDENT implementation of what
--- src/lib/server/rotation-retention.ts computes, kept so the panel's numbers can be reproduced
--- by hand and reconciled -- which is one of the build brief's acceptance criteria for Phase 5.
+-- A SECOND implementation of what src/lib/server/rotation-retention.ts computes, so the panel's
+-- numbers can be reproduced by hand -- one of the build brief's acceptance criteria for Phase 5.
 -- The panel does the statistics in TypeScript so they can be unit-tested (no test in this
--- repository can reach Postgres); this file does the same arithmetic in the database.
+-- repository can reach Postgres); this does the same arithmetic in the database.
 --
--- Run it:
 --   psql "$DATABASE_URL" -v server="'<server-uuid>'" -f docs/refx/rotation-retention.sql
 --
--- The two implementations agree to the cent on residual, matches and se. The interval may differ
--- in the last digit only through rounding.
+-- WHAT AGREEMENT BETWEEN THESE TWO DOES AND DOES NOT PROVE. It proves the data extraction and
+-- the arithmetic: the LATERAL joins, the slot bucketing, the exclusions, the aggregation. It
+-- proves NOTHING about whether the estimator is the right one, because the same algorithm was
+-- written twice. That is not hypothetical -- an earlier version of both stopped the fit after
+-- three passes, and the two agreed perfectly on an answer that was out by 0.8 players. What
+-- catches that is rotation-retention.test.ts, which scores fixtures whose truth is known.
 --
 -- Read docs/refx/rotation-retention.md for what the number means and what it does not.
 
 \set ON_ERROR_STOP on
+SET client_min_messages = warning;
 
+-- ---------------------------------------------------------------------------------------------
+-- 1. Eligible matches, with both population readings pinned to the match they belong to.
+-- ---------------------------------------------------------------------------------------------
+-- Every clause is load-bearing:
+--  * ended_at IS NOT NULL -- a live match has no ten-minute mark, and prune() deletes on
+--    `ended_at < cutoff`, which NULL never satisfies, so matches abandoned by a poller that
+--    never restarted would otherwise accumulate for ever and keep qualifying.
+--  * duration >= horizon + grab -- the whole read window must lie inside the match. Filtering on
+--    the horizon alone leaves a hole: a failed poll near the ten-minute mark pushes the second
+--    reading past a short match's end and into the next map.
+--  * LEAST(ended_at, ...) and s.map IS NOT DISTINCT FROM m.map -- started_at is back-derived as
+--    (ts - matchSeconds), so it can precede the sample that first saw the match. Without both,
+--    `ts >= started_at ORDER BY ts LIMIT 1` can return the last sample of the PREVIOUS match.
+--  * cap from the SAME sample as ccu_start -- an unbounded forward scan reads max_players from
+--    whenever sampling resumed after an outage.
+--  * ORDER BY s.ts, s.ctid -- samples is indexed on (server_id, ts) but has no unique key.
+--  * AT TIME ZONE 'UTC' -- EXTRACT on a timestamptz silently reads the session TimeZone, which
+--    nothing in this codebase sets, so a laptop and the container would bucket rows differently.
+--  * cap > 0 -- the poller coerces a missing players.max to 0, so on an RCON build that omits it
+--    the headroom filter would drop every match on the server and return nothing, with no error.
+DROP TABLE IF EXISTS rr_d;
+CREATE TEMP TABLE rr_d AS
 WITH p AS (
-  SELECT :server::text     AS server_id,
-         interval '30 days' AS win,
-         'UTC'::text        AS tz,
-         20::int            AS min_matches,
-         0.90::numeric      AS headroom,
-         interval '10 minutes' AS horizon,
-         interval '2 minutes'  AS grab
+  SELECT :server::text AS server_id, interval '30 days' AS win, 'UTC'::text AS tz,
+         0.90::numeric AS headroom, interval '10 minutes' AS horizon, interval '2 minutes' AS grab
 ),
--- Closed matches whose whole read window lies inside the match. `ended_at IS NOT NULL` is
--- load-bearing twice over: a live match has no ten-minute mark yet, and prune() deletes on
--- `ended_at < cutoff`, which NULL never satisfies, so matches abandoned by a poller that never
--- restarted would otherwise accumulate for ever and keep qualifying.
 m AS (
   SELECT mt.id, mt.server_id, mt.map, mt.started_at, mt.ended_at
     FROM matches mt, p
@@ -38,12 +54,6 @@ m AS (
      AND mt.ended_at IS NOT NULL
      AND mt.ended_at >= mt.started_at + p.horizon + p.grab
 ),
--- Both readings pinned to the match they belong to. started_at is back-derived as
--- (ts - matchSeconds), so it can precede the sample that first saw the match; without the
--- LEAST() clip and the map equality, `ts >= started_at ORDER BY ts LIMIT 1` can return the last
--- sample of the PREVIOUS match. `cap` comes from the same sample as ccu_start, because an
--- unbounded forward scan reads max_players from whenever sampling resumed after an outage.
--- The ctid tiebreaker matters: samples has an index on (server_id, ts) but no unique key.
 edge AS (
   SELECT m.*, a.player_count AS ccu_start, a.max_players AS cap, b.player_count AS ccu_10
     FROM m, p
@@ -62,18 +72,8 @@ edge AS (
             AND s.map IS NOT DISTINCT FROM m.map
           ORDER BY s.ts, s.ctid LIMIT 1) b ON TRUE
 ),
--- EXTRACT on a timestamptz silently reads the session TimeZone, which nothing in this codebase
--- sets, so psql on a laptop and the container would bucket the same row differently. Always
--- AT TIME ZONE an explicit value. 48 buckets (weekend flag x hour), not 168: over 30 days, 168
--- leaves many buckets holding one match, and a bucket of one has a residual of exactly zero by
--- construction, which dilutes the signal and tightens the error bars at the same time.
---
--- cap > 0 is not paranoia: the poller coerces a missing players.max to 0, so on an RCON build
--- that omits it `ccu_start < cap * headroom` is false for every row and the whole query returns
--- nothing, with no error.
 d0 AS (
-  SELECT e.id, e.map, e.started_at, e.ccu_start,
-         (e.ccu_10 - e.ccu_start)::numeric AS delta,
+  SELECT e.id, e.map, e.ccu_start, (e.ccu_10 - e.ccu_start)::numeric AS delta,
          (EXTRACT(ISODOW FROM (e.started_at AT TIME ZONE p.tz)) >= 6)::int * 24
            + EXTRACT(HOUR FROM (e.started_at AT TIME ZONE p.tz))::int AS slot,
          (e.started_at AT TIME ZONE p.tz)::date AS day
@@ -82,57 +82,137 @@ d0 AS (
      AND e.cap IS NOT NULL AND e.cap > 0
      AND e.ccu_start::numeric < e.cap * p.headroom
 ),
--- Control for starting population, as a deviation from the slot's own norm. Rotation is
--- ordered, so each map has a fixed predecessor and a systematically different starting
--- population; population mean-reverts toward its time-of-day norm, so a map that always follows
--- a popular map bleeds through reversion alone. ccu_start is measured before the map's ten
--- minutes elapse, so conditioning on it is legitimate. ccu_10 is the outcome; never condition
--- on that.
+-- Control for starting population as a deviation from the slot's own norm. Rotation is ordered,
+-- so each map has a fixed predecessor and a systematically different start; population reverts
+-- toward its time-of-day norm, so a map that always follows a popular one bleeds through
+-- reversion alone. ccu_start is measured before the map's ten minutes elapse, so conditioning on
+-- it is legitimate. ccu_10 is the outcome; never condition on that.
 sc AS (SELECT slot, AVG(ccu_start)::numeric AS slot_ccu FROM d0 GROUP BY slot),
 dx AS (SELECT d0.*, (d0.ccu_start - sc.slot_ccu) AS excess FROM d0 JOIN sc USING (slot)),
-sl AS (SELECT COALESCE(regr_slope(delta, excess), 0)::numeric AS g FROM dx),
-d  AS (SELECT dx.id, dx.map, dx.slot, dx.day, dx.delta - sl.g * dx.excess AS y FROM dx, sl),
+sl AS (SELECT COALESCE(regr_slope(delta, excess), 0)::numeric AS g FROM dx)
+SELECT dx.id, dx.map, dx.slot, dx.day, (dx.delta - sl.g * dx.excess)::numeric AS y
+  FROM dx, sl;
 
--- Two-way additive fit, y = mu + slot effect + map effect, by back-fitting. A single pass of
--- per-slot averaging would BE the self-baseline this whole query exists to avoid: a slot mean
--- taken over the same rows being scored is pulled toward whichever map dominates that slot, by
--- exactly (1 - n_map,slot / n_slot). On a rotation where one map holds half the entries that is
--- enough to report the second-worst map in the rotation as above average.
-gm AS (SELECT AVG(y) AS mu FROM d),
-b0 AS (SELECT map, AVG(y) - (SELECT mu FROM gm) AS b FROM d GROUP BY map),
-a1 AS (SELECT d.slot, AVG(d.y - b0.b) - (SELECT mu FROM gm) AS a FROM d JOIN b0 USING (map) GROUP BY d.slot),
-b1 AS (SELECT d.map,  AVG(d.y - a1.a) - (SELECT mu FROM gm) AS b FROM d JOIN a1 USING (slot) GROUP BY d.map),
-a2 AS (SELECT d.slot, AVG(d.y - b1.b) - (SELECT mu FROM gm) AS a FROM d JOIN b1 USING (map) GROUP BY d.slot),
-b2 AS (SELECT d.map,  AVG(d.y - a2.a) - (SELECT mu FROM gm) AS b FROM d JOIN a2 USING (slot) GROUP BY d.map),
-a3 AS (SELECT d.slot, AVG(d.y - b2.b) - (SELECT mu FROM gm) AS a FROM d JOIN b2 USING (map) GROUP BY d.slot),
-b3 AS (SELECT d.map,  AVG(d.y - a3.a) - (SELECT mu FROM gm) AS b FROM d JOIN a3 USING (slot) GROUP BY d.map),
+CREATE INDEX ON rr_d (map);
+CREATE INDEX ON rr_d (slot);
 
--- The zero point is the unweighted average of the SCOREABLE maps. Unweighted, so rotation share
--- cannot move it -- which matters because the point of the number is to then edit the rotation.
--- Scoreable only, so a map that ran twelve times cannot re-baseline the maps that ran three
--- hundred; sub-threshold matches stay in the fit above, where their slot information is useful.
-cnt AS (SELECT map, COUNT(*)::numeric AS n FROM d GROUP BY map),
-ctr AS (
-  SELECT COALESCE(
-           (SELECT AVG(b3.b) FROM b3 JOIN cnt USING (map), p WHERE cnt.n >= p.min_matches),
-           (SELECT AVG(b) FROM b3)
-         ) AS c
+-- ---------------------------------------------------------------------------------------------
+-- 2. Two-way additive fit, y = mu + slot effect + map effect, by alternating least squares.
+-- ---------------------------------------------------------------------------------------------
+-- ITERATED TO CONVERGENCE, not a fixed number of passes. On an unbalanced design -- which every
+-- real rotation is, because maps do not appear evenly across the clock -- three passes leaves a
+-- large part of the slot effect still charged to the maps. Measured on a fixture with known
+-- truth, three passes reported +1.30 for a map whose true effect was +0.50. It settles near 40.
+DROP TABLE IF EXISTS rr_alpha;
+DROP TABLE IF EXISTS rr_beta;
+CREATE TEMP TABLE rr_alpha (slot int PRIMARY KEY, a numeric);
+CREATE TEMP TABLE rr_beta (map text PRIMARY KEY, b numeric);
+
+DO $$
+DECLARE
+  mu numeric;
+  moved numeric;
+  i int := 0;
+BEGIN
+  SELECT AVG(y) INTO mu FROM rr_d;
+  INSERT INTO rr_beta SELECT map, 0::numeric FROM rr_d GROUP BY map;
+
+  LOOP
+    i := i + 1;
+
+    CREATE TEMP TABLE rr_alpha_new AS
+      SELECT d.slot, AVG(d.y - mu - COALESCE(b.b, 0)) AS a
+        FROM rr_d d LEFT JOIN rr_beta b USING (map) GROUP BY d.slot;
+
+    CREATE TEMP TABLE rr_beta_new AS
+      SELECT d.map, AVG(d.y - mu - COALESCE(a.a, 0)) AS b
+        FROM rr_d d LEFT JOIN rr_alpha_new a USING (slot) GROUP BY d.map;
+
+    SELECT GREATEST(
+             COALESCE((SELECT MAX(ABS(n.a - COALESCE(o.a, 0))) FROM rr_alpha_new n
+                         LEFT JOIN rr_alpha o USING (slot)), 0),
+             COALESCE((SELECT MAX(ABS(n.b - COALESCE(o.b, 0))) FROM rr_beta_new n
+                         LEFT JOIN rr_beta o USING (map)), 0))
+      INTO moved;
+
+    DELETE FROM rr_alpha;
+    INSERT INTO rr_alpha SELECT slot, a FROM rr_alpha_new;
+    DELETE FROM rr_beta;
+    INSERT INTO rr_beta SELECT map, b FROM rr_beta_new;
+    DROP TABLE rr_alpha_new;
+    DROP TABLE rr_beta_new;
+
+    EXIT WHEN moved < 1e-9 OR i >= 500;
+  END LOOP;
+
+  IF i >= 500 THEN
+    RAISE WARNING 'rotation-retention: fit hit the 500-pass cap without settling (moved=%)', moved;
+  END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------------------------
+-- 3. Which maps can be compared at all.
+-- ---------------------------------------------------------------------------------------------
+-- The fit identifies a map only RELATIVE to maps it shares time slots with, directly or
+-- transitively. A map that only ever runs at 04:00, alone, has its own effect and the
+-- time-of-day effect perfectly confounded: the fit can put all of it in either, and does.
+-- Measured on a fixture, such a map came out at exactly 0.00 against a true effect of +0.50.
+-- So: connected components of the bipartite map/slot graph; only the component holding the most
+-- matches is comparable.
+DROP TABLE IF EXISTS rr_comp;
+CREATE TEMP TABLE rr_comp AS
+WITH RECURSIVE edges(a, b) AS (
+  SELECT DISTINCT 'm:' || map, 's:' || slot::text FROM rr_d
+  UNION
+  SELECT DISTINCT 's:' || slot::text, 'm:' || map FROM rr_d
 ),
+seeds(node, root) AS (
+  SELECT DISTINCT 'm:' || map, 'm:' || map FROM rr_d
+),
+reach(root, node) AS (
+  SELECT root, node FROM seeds
+  UNION
+  SELECT r.root, e.b FROM reach r JOIN edges e ON e.a = r.node
+)
+-- A component is identified by the smallest node label reachable from it, which is stable.
+SELECT node AS member, MIN(root) AS component FROM reach GROUP BY node;
+
+-- ---------------------------------------------------------------------------------------------
+-- 4. Residuals, day-clustered standard errors, and the reasons a number is withheld.
+-- ---------------------------------------------------------------------------------------------
+WITH p AS (SELECT 20::int AS min_matches),
+mu AS (SELECT AVG(y) AS mu FROM rr_d),
 r AS (
-  SELECT d.id, d.map, d.day,
-         (d.y - a3.a - (SELECT mu FROM gm)) - (SELECT c FROM ctr) AS resid
-    FROM d JOIN a3 USING (slot)
+  SELECT d.id, d.map, d.day, d.y - COALESCE(a.a, 0) - (SELECT mu FROM mu) AS raw
+    FROM rr_d d LEFT JOIN rr_alpha a USING (slot)
 ),
-agg AS (SELECT map, COUNT(*)::numeric AS n, AVG(resid) AS residual FROM r GROUP BY map),
-
+cnt AS (SELECT map, COUNT(*)::numeric AS n FROM rr_d GROUP BY map),
+main AS (
+  SELECT c.component
+    FROM rr_comp c JOIN rr_d d ON ('m:' || d.map) = c.member
+   GROUP BY c.component ORDER BY COUNT(*) DESC LIMIT 1
+),
+comparable AS (
+  SELECT substring(c.member from 3) AS map
+    FROM rr_comp c, main, cnt, p
+   WHERE c.member LIKE 'm:%' AND c.component = main.component
+     AND cnt.map = substring(c.member from 3) AND cnt.n >= p.min_matches
+),
+-- The zero point is the unweighted average of the COMPARABLE maps: unweighted so rotation share
+-- cannot move it, comparable-only so a map nobody can act on does not re-baseline the rest.
+ctr AS (
+  SELECT COALESCE((SELECT AVG(b.b) FROM rr_beta b JOIN comparable USING (map)),
+                  (SELECT AVG(b) FROM rr_beta)) AS c
+),
+res AS (SELECT r.id, r.map, r.day, r.raw - (SELECT c FROM ctr) AS resid FROM r),
+agg AS (SELECT map, COUNT(*)::numeric AS n, AVG(resid) AS residual FROM res GROUP BY map),
 -- CR1 cluster-robust standard error, clustered by day: consecutive matches share a population
 -- wave and largely the same players, so treating each match as independent overstates precision.
-cl  AS (SELECT r.map, r.day, SUM(r.resid - a.residual) AS c FROM r JOIN agg a USING (map) GROUP BY r.map, r.day),
+cl  AS (SELECT res.map, res.day, SUM(res.resid - a.residual) AS c
+          FROM res JOIN agg a USING (map) GROUP BY res.map, res.day),
 cse AS (SELECT map, SUM(c * c) AS ss, COUNT(*)::numeric AS g FROM cl GROUP BY map),
-
--- A 30-day window gives about 30 day-clusters, and the usual 1.96 assumes infinitely many.
--- Measured on synthetic rotations, a normal critical value rejected 9-13% of random half-splits
--- of an IDENTICAL map against a nominal 5%. t(G-1) brings it back to nominal.
+-- A 30-day window is about 30 day-clusters, and 1.96 assumes infinitely many. Measured over 200
+-- random half-splits of one map, a normal critical value rejected 9-13% against a nominal 5%.
 tq(df, t) AS (VALUES
   (1,12.706),(2,4.303),(3,3.182),(4,2.776),(5,2.571),(6,2.447),(7,2.365),(8,2.306),(9,2.262),
   (10,2.228),(11,2.201),(12,2.179),(13,2.160),(14,2.145),(15,2.131),(16,2.120),(17,2.110),
@@ -141,24 +221,34 @@ tq(df, t) AS (VALUES
 ),
 se AS (
   SELECT cse.map,
-         sqrt(cse.ss * cse.g / GREATEST(cse.g - 1, 1)) / agg.n AS se,
-         COALESCE(
-           (SELECT t FROM tq WHERE df = (cse.g - 1)::int),
-           -- Cornish-Fisher beyond the table; within 0.0001 of the true quantile for df > 30.
-           1.959963985
-             + (1.959963985 ^ 3 + 1.959963985) / (4 * (cse.g - 1))
-             + (5 * 1.959963985 ^ 5 + 16 * 1.959963985 ^ 3 + 3 * 1.959963985)
-               / (96 * (cse.g - 1) * (cse.g - 1))
-         )::numeric AS tcrit
+         CASE WHEN cse.g >= 2 THEN sqrt(cse.ss * cse.g / (cse.g - 1)) / agg.n END AS se,
+         COALESCE((SELECT t FROM tq WHERE df = (cse.g - 1)::int),
+                  1.959963985 + (1.959963985 ^ 3 + 1.959963985) / (4 * GREATEST(cse.g - 1, 1))
+                    + (5 * 1.959963985 ^ 5 + 16 * 1.959963985 ^ 3 + 3 * 1.959963985)
+                      / (96 * GREATEST(cse.g - 1, 1) ^ 2))::numeric AS tcrit
     FROM cse JOIN agg USING (map)
+),
+withheld AS (
+  SELECT a.map,
+         CASE
+           WHEN a.n < p.min_matches THEN 'too-few-matches'
+           WHEN NOT EXISTS (SELECT 1 FROM comparable c WHERE c.map = a.map) THEN 'not-comparable'
+           WHEN (SELECT COUNT(*) FROM comparable) < 2 THEN 'nothing-to-compare-with'
+         END AS why
+    FROM agg a, p
 )
--- The threshold is a CASE in the projection, not a HAVING: a map below it must still show its
--- count, or the panel cannot tell "too little data" from "not in the rotation".
 SELECT a.map,
        a.n::int AS matches,
-       CASE WHEN a.n >= p.min_matches THEN round(a.residual, 2) END AS residual,
-       CASE WHEN a.n >= p.min_matches THEN round(se.se, 2) END AS se,
-       CASE WHEN a.n >= p.min_matches THEN round(a.residual - se.tcrit * se.se, 2) END AS lo95,
-       CASE WHEN a.n >= p.min_matches THEN round(a.residual + se.tcrit * se.se, 2) END AS hi95
-  FROM agg a JOIN se USING (map), p
- ORDER BY (a.n >= p.min_matches) DESC, a.residual NULLS LAST;
+       w.why AS withheld,
+       CASE WHEN w.why IS NULL THEN round(a.residual, 2) END AS residual,
+       -- se is NULL when NOT ESTIMABLE, which is not the same as small: one day-cluster, or no
+       -- observed spread at all. Reporting 0 would claim infinite precision from one evening.
+       CASE WHEN w.why IS NULL AND se.se > 0 THEN round(se.se, 2) END AS se,
+       CASE WHEN w.why IS NULL AND se.se > 0 THEN round(a.residual - se.tcrit * se.se, 2) END AS lo95,
+       CASE WHEN w.why IS NULL AND se.se > 0 THEN round(a.residual + se.tcrit * se.se, 2) END AS hi95
+  FROM agg a JOIN se USING (map) JOIN withheld w USING (map), p
+-- Scored maps worst first; withheld maps after them, most-played first -- the same order the
+-- panel uses, so the two listings can be compared line by line.
+ ORDER BY (w.why IS NULL) DESC,
+          CASE WHEN w.why IS NULL THEN a.residual END ASC,
+          a.n DESC;

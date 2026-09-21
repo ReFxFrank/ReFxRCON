@@ -14,9 +14,11 @@
  * What it corrects for, and why each one matters:
  *
  *  - Time of day. A map that rotates in at 3am always looks terrible. Matches are bucketed into
- *    weekend-flag x hour-of-day (48 buckets, not 168: over a 30-day window 168 leaves many
- *    buckets holding a single match, and a bucket of one has a residual of exactly zero by
- *    construction -- which both dilutes the signal and tightens the error bars).
+ *    weekend-flag x hour-of-day: 48 buckets, not the 168 of a full hour-of-week. Over a 30-day
+ *    window 168 leaves many buckets holding a single match, and a bucket of one carries no
+ *    information -- its slot effect is fixed exactly by that one row, so the row's residual is
+ *    pinned to its map's effect and contributes no variance. That deflates the standard error
+ *    while adding nothing to the estimate, which is the worst combination available.
  *
  *  - Headroom. A server at capacity cannot grow, so matches starting above 90% of max_players
  *    are excluded.
@@ -68,6 +70,10 @@ export const GRAB_MINUTES = 2;
 export const HEADROOM = 0.9;
 /** Below this many matches a map gets a count and no number. */
 export const MIN_MATCHES = 20;
+/** The alternating fit stops when no effect moves by more than this. */
+const FIT_TOLERANCE = 1e-9;
+/** A cap so a pathological input cannot spin. Real rotations settle in well under a hundred. */
+const MAX_FIT_PASSES = 500;
 
 /** One candidate match with its two population readings, straight out of SQL. */
 export interface RetentionMatch {
@@ -86,18 +92,40 @@ export interface RetentionMatch {
 	cap: number | null;
 }
 
+/** Why a map has no residual. `null` means it has one. */
+export type Withheld =
+	/** Fewer than MIN_MATCHES matches. */
+	| 'too-few-matches'
+	/**
+	 * This map never shares a time slot with any other scoreable map, so its map effect and its
+	 * time-of-day effect cannot be told apart. A map that only ever runs at 04:00 is scored
+	 * against nothing.
+	 */
+	| 'not-comparable'
+	/** Fewer than two scoreable maps: a rotation of one has nothing to be above or below. */
+	| 'nothing-to-compare-with';
+
 export interface MapRetention {
 	/** The map id. Run it through mapLabel() before showing it. */
 	map: string;
 	/** Present only when grouping by (map, experiences). */
 	experiences: string | null;
 	matches: number;
+	/** Set when `residual` is null, saying which reason applies. */
+	withheld: Withheld | null;
 	/**
 	 * Players gained or lost over the first ten minutes, relative to the average map in this
 	 * rotation, after time-of-day and starting population are removed. null below MIN_MATCHES.
 	 */
 	residual: number | null;
-	/** Day-clustered standard error of `residual`. null below MIN_MATCHES. */
+	/**
+	 * Day-clustered standard error of `residual`.
+	 *
+	 * null means NOT ESTIMABLE, which is not the same as small. It happens when every match for
+	 * this map fell on one calendar day (one cluster gives nothing to estimate spread from) or
+	 * when the residuals have no observed variance at all. `residual` can be non-null while this
+	 * is null: the estimate exists, the uncertainty around it does not.
+	 */
 	se: number | null;
 	lo95: number | null;
 	hi95: number | null;
@@ -139,7 +167,10 @@ export interface ScoreOptions {
 	minMatches?: number;
 	headroom?: number;
 	grouping?: Grouping;
-	/** Back-fitting passes. Three is enough for a balanced-ish design; more does not move it. */
+	/**
+	 * CAP on alternating-fit passes, not the number run: the fit stops when the effects settle.
+	 * Only lower it to prove a test case about non-convergence.
+	 */
 	passes?: number;
 }
 
@@ -238,6 +269,10 @@ interface FitRow {
 interface Fit {
 	kept: FitRow[];
 	resid: number[];
+	/** False when the alternating fit hit its pass cap without settling. */
+	converged: boolean;
+	/** Group keys that cleared the match threshold, and so define the zero point. */
+	scoreableKeys: string[];
 	grandMeanDelta: number | null;
 	excluded: RotationRetention['excluded'];
 }
@@ -253,7 +288,7 @@ interface Fit {
 function fit(rows: RetentionMatch[], opts: ScoreOptions): Fit {
 	const headroom = opts.headroom ?? HEADROOM;
 	const grouping = opts.grouping ?? 'map';
-	const passes = opts.passes ?? 3;
+	const passes = opts.passes ?? MAX_FIT_PASSES;
 
 	const excluded = {
 		total: 0,
@@ -299,7 +334,16 @@ function fit(rows: RetentionMatch[], opts: ScoreOptions): Fit {
 		});
 	}
 
-	if (!kept.length) return { kept, resid: [], grandMeanDelta: null, excluded };
+	if (!kept.length) {
+		return {
+			kept,
+			resid: [],
+			converged: true,
+			scoreableKeys: [],
+			grandMeanDelta: null,
+			excluded
+		};
+	}
 
 	// --- control for starting population, as a deviation from the slot's own norm --------------
 	// Reversion is toward the time-of-day norm, not the global mean, so the covariate is the
@@ -316,30 +360,45 @@ function fit(rows: RetentionMatch[], opts: ScoreOptions): Fit {
 	);
 	const y = kept.map((r, i) => r.delta - g * excess[i]);
 
-	// --- two-way additive fit: y = mu + slot effect + map effect, by back-fitting ---------------
-	// A single pass of per-slot averaging would BE the self-baseline this whole module exists to
-	// avoid; alternating until the two effect sets stop moving is what separates them.
+	/*
+	 * Two-way additive fit, y = mu + slot effect + map effect, by alternating least squares.
+	 *
+	 * A single pass of per-slot averaging would BE the self-baseline this whole module exists to
+	 * avoid, so the two effect sets are alternated until they stop moving. "Until they stop
+	 * moving" is load-bearing and a fixed pass count is not enough: on an unbalanced design --
+	 * which every real rotation is, because maps do not appear evenly across the clock -- three
+	 * passes leaves a large part of the slot effect still charged to the maps. Measured on a
+	 * fixture with known truth, three passes reported +1.30 for a map whose true effect was
+	 * +0.50, and -3.37 for one whose truth was -2.50. It settles around forty.
+	 *
+	 * Each pass is O(n) over a few thousand rows, so iterating to a tolerance costs nothing
+	 * worth measuring. `passes` is the CAP, not the count.
+	 */
 	const mu = mean(y);
-	let b = meansBy(
-		kept.map((r, i) => ({ r, v: y[i] })),
-		(x) => x.r.key,
-		(x) => x.v
-	);
-	for (const [k, v] of b) b.set(k, v - mu);
+	const b = new Map<string | number, number>();
 	let a = new Map<string | number, number>();
+	let converged = false;
 	for (let pass = 0; pass < passes; pass++) {
-		a = meansBy(
-			kept.map((r, i) => ({ r, v: y[i] - (b.get(r.key) ?? 0) })),
+		const nextA = meansBy(
+			kept.map((r, i) => ({ r, v: y[i] - mu - (b.get(r.key) ?? 0) })),
 			(x) => x.r.slot,
 			(x) => x.v
 		);
-		for (const [k, v] of a) a.set(k, v - mu);
-		b = meansBy(
-			kept.map((r, i) => ({ r, v: y[i] - (a.get(r.slot) ?? 0) })),
+		const nextB = meansBy(
+			kept.map((r, i) => ({ r, v: y[i] - mu - (nextA.get(r.slot) ?? 0) })),
 			(x) => x.r.key,
 			(x) => x.v
 		);
-		for (const [k, v] of b) b.set(k, v - mu);
+		let moved = 0;
+		for (const [k, v] of nextA) moved = Math.max(moved, Math.abs(v - (a.get(k) ?? 0)));
+		for (const [k, v] of nextB) moved = Math.max(moved, Math.abs(v - (b.get(k) ?? 0)));
+		a = nextA;
+		b.clear();
+		for (const [k, v] of nextB) b.set(k, v);
+		if (moved < FIT_TOLERANCE) {
+			converged = true;
+			break;
+		}
 	}
 
 	/*
@@ -355,15 +414,16 @@ function fit(rows: RetentionMatch[], opts: ScoreOptions): Fit {
 	const minMatches = opts.minMatches ?? MIN_MATCHES;
 	const counts = new Map<string, number>();
 	for (const r of kept) counts.set(r.key, (counts.get(r.key) ?? 0) + 1);
-	const scoreable = [...b.entries()]
-		.filter(([k]) => (counts.get(String(k)) ?? 0) >= minMatches)
-		.map(([, v]) => v);
+	const scoreableKeys = [...counts.entries()].filter(([, n]) => n >= minMatches).map(([k]) => k);
+	const scoreable = scoreableKeys.map((k) => b.get(k) ?? 0);
 	const centre = mean(scoreable.length ? scoreable : [...b.values()]);
 	const resid = kept.map((r, i) => y[i] - (a.get(r.slot) ?? 0) - mu - centre);
 
 	return {
 		kept,
 		resid,
+		converged,
+		scoreableKeys,
 		grandMeanDelta: round2(mean(kept.map((r) => r.delta))),
 		excluded
 	};
@@ -385,6 +445,49 @@ export function scoreRotationRetention(
 		return { maps: [], eligible: 0, grandMeanDelta: null, excluded: f.excluded };
 	}
 
+	/*
+	 * Which maps can be compared at all.
+	 *
+	 * The fit decomposes y into a slot effect and a map effect. That decomposition identifies a
+	 * map only RELATIVE to maps it shares time slots with, directly or transitively. A map that
+	 * only ever runs at 04:00, and is the only thing that runs at 04:00, has its time-of-day
+	 * effect and its own effect perfectly confounded: the fit can put all of it in either, and
+	 * does. Measured on a fixture, such a map came out at exactly 0.00 against a true effect of
+	 * +0.50, with nothing in the output to indicate anything was wrong.
+	 *
+	 * So: connected components of the bipartite map/slot graph, and a number is withheld from
+	 * anything outside the component holding the most matches.
+	 */
+	const parent = new Map<string, string>();
+	const find = (x: string): string => {
+		let r = x;
+		while (parent.get(r) !== undefined && parent.get(r) !== r) r = parent.get(r) as string;
+		parent.set(x, r);
+		return r;
+	};
+	const union = (x: string, y2: string) => {
+		parent.set(x, parent.get(x) ?? x);
+		parent.set(y2, parent.get(y2) ?? y2);
+		const rx = find(x);
+		const ry = find(y2);
+		if (rx !== ry) parent.set(rx, ry);
+	};
+	for (const r of kept) union(`m:${r.key}`, `s:${r.slot}`);
+	const componentMatches = new Map<string, number>();
+	for (const r of kept) {
+		const c = find(`m:${r.key}`);
+		componentMatches.set(c, (componentMatches.get(c) ?? 0) + 1);
+	}
+	let mainComponent = '';
+	let best = -1;
+	for (const [c, n] of componentMatches) {
+		if (n > best) {
+			best = n;
+			mainComponent = c;
+		}
+	}
+	const comparable = new Set(f.scoreableKeys.filter((k) => find(`m:${k}`) === mainComponent));
+
 	const groups = new Map<string, { map: string; experiences: string | null; idx: number[] }>();
 	kept.forEach((r, i) => {
 		const cur = groups.get(r.key);
@@ -393,25 +496,42 @@ export function scoreRotationRetention(
 	});
 
 	const maps: MapRetention[] = [];
-	for (const [, grp] of groups) {
+	for (const [key, grp] of groups) {
 		const n = grp.idx.length;
+		let withheld: Withheld | null = null;
+		if (n < minMatches) withheld = 'too-few-matches';
+		else if (!comparable.has(key)) withheld = 'not-comparable';
+		else if (comparable.size < 2) withheld = 'nothing-to-compare-with';
+
 		const residual = mean(grp.idx.map((i) => resid[i]));
 		let se: number | null = null;
 		let half: number | null = null;
-		if (n >= minMatches) {
+		if (!withheld) {
 			const byDay = new Map<string, number>();
 			for (const i of grp.idx) {
 				byDay.set(kept[i].day, (byDay.get(kept[i].day) ?? 0) + (resid[i] - residual));
 			}
 			const c = clusteredSe(byDay, n);
-			se = c.se;
-			half = t975(c.groups - 1) * c.se;
+			const t = t975(c.groups - 1);
+			/*
+			 * One day-cluster gives nothing to estimate spread from, and the arithmetic says so
+			 * loudly if you let it: the single cluster's centred sum is exactly zero, so the
+			 * standard error comes out 0 and t(0) is Infinity, whose product is NaN -- which
+			 * JSON serialises as null while the residual stays a number. Reporting se = 0 would
+			 * be worse still: a claim of infinite precision from one evening's play.
+			 */
+			if (c.groups >= 2 && c.se > 0 && Number.isFinite(t)) {
+				se = c.se;
+				half = t * c.se;
+			}
 		}
+
 		maps.push({
 			map: grp.map,
 			experiences: grouping === 'map+experiences' ? grp.experiences : null,
 			matches: n,
-			residual: n >= minMatches ? round2(residual) : null,
+			withheld,
+			residual: withheld ? null : round2(residual),
 			se: se === null ? null : round2(se),
 			lo95: half === null ? null : round2(residual - half),
 			hi95: half === null ? null : round2(residual + half)

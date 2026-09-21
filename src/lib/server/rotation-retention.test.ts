@@ -402,6 +402,202 @@ describe('scoreRotationRetention — the absolute level is not thrown away', () 
 	});
 });
 
+describe('scoreRotationRetention — degenerate shapes must withhold, not invent', () => {
+	const mk = (
+		id: number,
+		map: string,
+		slot: number,
+		day: string,
+		a: number,
+		b: number
+	): RetentionMatch => ({ id, map, experiences: null, slot, day, ccuStart: a, ccu10: b, cap: 64 });
+
+	/*
+	 * Every match for one map on a single calendar day. Standard errors are clustered by day, so
+	 * one cluster gives nothing to estimate spread from. The arithmetic says so if you let it --
+	 * the single cluster's centred sum is exactly zero, the SE comes out 0, t(0) is Infinity, and
+	 * their product is NaN, which JSON serialises as null while the residual stays a number. An
+	 * SE of 0 would be worse than the NaN: a claim of infinite precision from one evening.
+	 */
+	test('a map whose matches all fall on one day keeps its estimate and loses its interval', () => {
+		const rows: RetentionMatch[] = [];
+		for (let i = 0; i < 25; i++)
+			rows.push(mk(i, 'OneDay', 18 + (i % 3), '2026-07-01', 10 + (i % 7), 12 + (i % 5)));
+		for (let i = 0; i < 25; i++)
+			rows.push(
+				mk(100 + i, 'Spread', 18 + (i % 3), `2026-07-0${1 + (i % 5)}`, 10 + (i % 7), 11 + (i % 5))
+			);
+		const r = scoreRotationRetention(rows, { minMatches: 20 });
+		const one = r.maps.find((m) => m.map === 'OneDay')!;
+		expect(one.residual).not.toBeNull();
+		expect(one.se).toBeNull();
+		expect(one.lo95).toBeNull();
+		expect(one.hi95).toBeNull();
+		// And never a zero standing in for "not estimable".
+		expect(one.se).not.toBe(0);
+	});
+
+	test('a rotation with one scoreable map scores nothing: there is nothing to be above', () => {
+		const rows: RetentionMatch[] = [];
+		for (let i = 0; i < 30; i++)
+			rows.push(
+				mk(
+					i,
+					'Solo',
+					12 + (i % 4),
+					`2026-07-${String(1 + (i % 20)).padStart(2, '0')}`,
+					10 + (i % 9),
+					9 + (i % 11)
+				)
+			);
+		for (let i = 0; i < 5; i++)
+			rows.push(mk(200 + i, 'Rare', 12 + (i % 4), `2026-07-0${1 + (i % 5)}`, 10, 4));
+		const r = scoreRotationRetention(rows, { minMatches: 20 });
+		const solo = r.maps.find((m) => m.map === 'Solo')!;
+		// Its residual is 0 by construction -- the reference is the mean over scoreable maps and
+		// it is the only one. Publishing 0.00 with an interval would read as "measured, neutral".
+		expect(solo.residual).toBeNull();
+		expect(solo.withheld).toBe('nothing-to-compare-with');
+		expect(r.maps.find((m) => m.map === 'Rare')!.withheld).toBe('too-few-matches');
+	});
+
+	/*
+	 * The fit decomposes into a slot effect and a map effect, which identifies a map only
+	 * relative to maps it shares slots with. A map that only ever runs at 04:00, alone, has the
+	 * two perfectly confounded: the fit can put all of it in either and the answer is arbitrary.
+	 */
+	test('a map that shares no time slot with any other is not comparable and says so', () => {
+		const rows: RetentionMatch[] = [];
+		for (let i = 0; i < 25; i++)
+			rows.push(
+				mk(
+					i,
+					'NightOnly',
+					3,
+					`2026-07-${String(1 + (i % 25)).padStart(2, '0')}`,
+					10 + (i % 5),
+					6 + (i % 7)
+				)
+			);
+		for (let i = 0; i < 30; i++)
+			rows.push(
+				mk(
+					100 + i,
+					'DayA',
+					18 + (i % 2),
+					`2026-07-${String(1 + (i % 25)).padStart(2, '0')}`,
+					20 + (i % 6),
+					21 + (i % 7)
+				)
+			);
+		for (let i = 0; i < 30; i++)
+			rows.push(
+				mk(
+					200 + i,
+					'DayB',
+					18 + (i % 2),
+					`2026-07-${String(1 + (i % 25)).padStart(2, '0')}`,
+					20 + (i % 6),
+					22 + (i % 7)
+				)
+			);
+		const r = scoreRotationRetention(rows, { minMatches: 20 });
+		const night = r.maps.find((m) => m.map === 'NightOnly')!;
+		expect(night.withheld).toBe('not-comparable');
+		expect(night.residual).toBeNull();
+		expect(night.matches).toBe(25);
+		// The maps that DO share a slot are still scored.
+		expect(r.maps.find((m) => m.map === 'DayA')!.residual).not.toBeNull();
+	});
+
+	test('no map is handed a residual without either an interval or a stated reason', () => {
+		const rows: RetentionMatch[] = [];
+		for (let i = 0; i < 25; i++)
+			rows.push(mk(i, 'OneDay', 18 + (i % 3), '2026-07-01', 10 + (i % 7), 12 + (i % 5)));
+		for (let i = 0; i < 25; i++)
+			rows.push(
+				mk(100 + i, 'Spread', 18 + (i % 3), `2026-07-0${1 + (i % 5)}`, 10 + (i % 7), 11 + (i % 5))
+			);
+		for (const m of scoreRotationRetention(rows, { minMatches: 20 }).maps) {
+			if (m.residual === null) expect(m.withheld).not.toBeNull();
+			else expect(m.withheld).toBeNull();
+			// se, lo95 and hi95 always travel together.
+			const nulls = [m.se === null, m.lo95 === null, m.hi95 === null];
+			expect(nulls.every((x) => x === nulls[0])).toBe(true);
+		}
+	});
+});
+
+describe('scoreRotationRetention — the fit must actually converge', () => {
+	/*
+	 * The test the earlier balanced fixtures could not have caught, and the reason they were not
+	 * enough. On an UNBALANCED design -- which every real rotation is, because maps do not appear
+	 * evenly across the clock -- a fixed three passes of alternating least squares leaves a large
+	 * part of the slot effect still charged to the maps.
+	 */
+	function unbalanced(seed = 5): RetentionMatch[] {
+		let s = seed >>> 0;
+		const rand = () => {
+			s = (s * 1664525 + 1013904223) >>> 0;
+			return s / 4294967296;
+		};
+		const specs = [
+			{ m: 'A', eff: 0, slots: [18, 19, 20] },
+			{ m: 'B', eff: -3, slots: [2, 3, 4] },
+			{ m: 'C', eff: 1, slots: [18, 3] }
+		];
+		const rows: RetentionMatch[] = [];
+		let id = 0;
+		for (let day = 1; day <= 30; day++)
+			for (const sp of specs)
+				for (let k = 0; k < 6; k++) {
+					const slot = sp.slots[k % sp.slots.length];
+					const slotEff = slot >= 16 && slot < 22 ? 1.6 : slot >= 2 && slot < 10 ? -1.9 : 0.1;
+					const norm = slot >= 16 && slot < 22 ? 26 : slot < 10 ? 10 : 16;
+					const ccuStart = Math.max(1, Math.round(norm + (rand() - 0.5) * 9));
+					const d = sp.eff + slotEff - 0.35 * (ccuStart - norm) + (rand() - 0.5) * 2.2;
+					rows.push({
+						id: id++,
+						map: sp.m,
+						experiences: null,
+						slot,
+						day: `2026-07-${String(day).padStart(2, '0')}`,
+						ccuStart,
+						ccu10: Math.max(0, Math.round(ccuStart + d)),
+						cap: 64
+					});
+				}
+		return rows;
+	}
+
+	const rows = unbalanced();
+	const at = (passes: number, map: string) =>
+		scoreRotationRetention(rows, { minMatches: 20, passes }).maps.find((m) => m.map === map)!
+			.residual as number;
+
+	test('three passes is not enough, and the error exceeds the effects being ranked', () => {
+		// Regression guard: if this stops being true the fixture is no longer unbalanced and the
+		// test below stops proving anything.
+		expect(Math.abs(at(3, 'B') - at(500, 'B'))).toBeGreaterThan(0.5);
+	});
+
+	test('the default run has settled: more passes do not move it', () => {
+		for (const m of ['A', 'B', 'C']) {
+			expect(Math.abs(at(500, m) - at(2000, m))).toBeLessThan(0.005);
+			const dflt = scoreRotationRetention(rows, { minMatches: 20 }).maps.find((x) => x.map === m)!
+				.residual as number;
+			expect(Math.abs(dflt - at(2000, m))).toBeLessThan(0.005);
+		}
+	});
+
+	test('the settled fit recovers the truth it was built from', () => {
+		// Truth 0, -3, +1 against an unweighted map mean of -0.667: targets +0.67, -2.33, +1.67.
+		expect(Math.abs(at(500, 'A') - 0.67)).toBeLessThan(0.35);
+		expect(Math.abs(at(500, 'B') + 2.33)).toBeLessThan(0.35);
+		expect(Math.abs(at(500, 'C') - 1.67)).toBeLessThan(0.35);
+	});
+});
+
 describe('nullTest', () => {
 	/*
 	 * The brief's other acceptance criterion: split one map's matches in half and score each

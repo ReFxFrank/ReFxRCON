@@ -42,14 +42,21 @@
 		return poll(load, 60000);
 	});
 
+	// poll() stops the timer when the range changes, but a request already in flight still
+	// resolves. Without this token a slow 90-day response lands after a fast 7-day one and the
+	// panel shows the wrong window under the wrong button.
+	let retSeq = 0;
 	async function loadRetention() {
+		const seq = ++retSeq;
+		const want = retRange;
 		try {
-			ret = await api<RotationRetention>(
+			const next = await api<RotationRetention>(
 				'GET',
-				`/api/servers/${encodeURIComponent(id)}/rotation-retention?range=${retRange}`
+				`/api/servers/${encodeURIComponent(id)}/rotation-retention?range=${want}`
 			);
+			if (seq === retSeq) ret = next;
 		} catch (err) {
-			toast(errorMessage(err), 'err');
+			if (seq === retSeq) toast(errorMessage(err), 'err');
 		}
 	}
 	// Five minutes: a match takes longer than that, so nothing can change faster.
