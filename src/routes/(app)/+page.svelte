@@ -60,7 +60,7 @@
 			{@const sum = summaries[s.id]}
 			<a
 				href="/server/{encodeURIComponent(s.id)}"
-				class="block rise panel transition hover:border-white/16 hover:bg-white/[0.055]"
+				class="panel block rise transition hover:border-white/16 hover:bg-white/[0.055]"
 			>
 				<div class="mb-1 flex items-center gap-2">
 					<Pulse ok={sum ? sum.ok : undefined} />

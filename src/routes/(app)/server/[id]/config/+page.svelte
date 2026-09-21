@@ -212,7 +212,7 @@
 		{#if sponsorShown}<img
 				src={sponsorShown}
 				alt=""
-				class="mt-3 max-w-full rounded-card border border-black"
+				class="mt-3 max-w-full rounded-card border border-edge"
 				referrerpolicy="no-referrer"
 			/>{/if}
 		<p class="note">
@@ -222,7 +222,7 @@
 	</div>
 </div>
 
-<div class="mt-4 panel">
+<div class="panel mt-4">
 	<div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
 		<span class="label-sm mb-0">Config document (ServerSettings.ini)</span>
 		<span class="text-[12.5px] text-mist-400"
@@ -287,24 +287,24 @@
 	{/if}
 
 	{#if docError}
-		<div class="mt-3 callout mb-0">
+		<div class="callout mt-3 mb-0">
 			No config document on this server ({docError}). Older WDRCON builds only expose the live
 			settings above.
 		</div>
 	{:else if doc && !doc.writable}
-		<div class="mt-3 callout mb-0">
+		<div class="callout mt-3 mb-0">
 			This server reports its config document as read-only (no -StandaloneConfig). Edits here cannot
 			be applied.
 		</div>
 	{/if}
 	{#each doc?.warnings ?? [] as w, i (i)}
-		<div class="mt-3 callout mb-0">
+		<div class="callout mt-3 mb-0">
 			{typeof w === 'object' && w && 'message' in w
 				? String((w as { message: unknown }).message)
 				: String(w)}
 		</div>
 	{/each}
-	{#if failure}<div class="mt-3 callout mb-0 border-danger/30 bg-danger/12">{failure}</div>{/if}
+	{#if failure}<div class="callout mt-3 mb-0 border-danger/30 bg-danger/12">{failure}</div>{/if}
 	{#each lineErrors as e, i (i)}
 		<div class="mt-2 flex items-center gap-2 text-[13px]">
 			<span class="pip {PIP['next-restart']}">line {e.line ?? '?'}</span><span

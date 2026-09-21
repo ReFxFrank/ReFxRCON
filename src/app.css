@@ -7,39 +7,57 @@
 @import 'tailwindcss';
 
 /*
- * Warcon "field terminal" tokens, in the Bulkhead Interactive idiom: charcoal panels on
- * near-black, hard 1px black borders, tight corners, tracked uppercase labels in Barlow, and one
- * brass accent. Semantic colours carry state; nothing glows.
+ * ReFx Glassy tokens: layered dark glass on deep navy, blue-tinted hairline borders, soft wide
+ * glow reserved for active states, tracked uppercase labels in Barlow. A premium control-panel
+ * idiom -- tactical and information-dense, never neon.
  *
- * Token names are kept generic (ink / mist / accent) so components read the same whatever the skin.
+ * Token names are kept generic (ink / mist / accent) so components read the same whatever the
+ * skin. Tailwind v4 generates utility classes from these NAMES (--color-ink-900 -> bg-ink-900),
+ * so a rename breaks every call site at once. Reskins change VALUES only. See CLAUDE.md rule 2.
  */
 @theme {
 	--font-sans: 'Barlow', 'Segoe UI', system-ui, -apple-system, sans-serif;
 	--font-display: 'Barlow Condensed', 'Barlow', 'Segoe UI', system-ui, sans-serif;
 	--font-mono: 'JetBrains Mono Variable', 'Cascadia Code', Consolas, ui-monospace, monospace;
 
-	--color-ink-950: #0f0f12; /* page */
-	--color-ink-900: #1a1a1e; /* panel */
-	--color-ink-800: #26262c; /* raised / hover */
-	--color-ink-700: #2f2f35;
+	--color-ink-950: #070b12; /* page */
+	--color-ink-900: #0a111d; /* panel */
+	--color-ink-800: #0f1828; /* raised / hover */
+	--color-ink-700: #16243a; /* raised edge / scrollbar */
 
-	--color-mist-100: #e8e8e8;
-	--color-mist-400: #8a8a90;
-	--color-mist-600: #55555c;
+	/* Every text token below clears WCAG AA (4.5:1) on ink-950, ink-900 and ink-800. */
+	--color-mist-100: #eef6ff; /* body            17.2:1 on panel */
+	--color-mist-400: #9fc2e8; /* secondary       10.2:1 on panel */
+	--color-mist-600: #6d8bb0; /* muted / empty    5.3:1 on panel */
 
-	--color-accent: #d4a843; /* brass */
-	--color-accent-2: #e6c56a; /* brass, lit */
-	--color-lilac: #d4a843; /* legacy alias: accent text */
-	--color-ok: #7bc462;
-	--color-warn: #d4a843;
-	--color-danger: #d86060;
-	--color-info: #5b95d8;
-	--color-override: #9b7fd4;
+	--color-accent: #7db7ff; /* accent TEXT and hairlines -- 9.0:1 on panel */
+	--color-accent-2: #9dccff; /* accent, lit */
+	/*
+	 * The fill blue. `accent` has to stay legible as text (48 `text-accent` call sites), which
+	 * puts it too pale to fill a control with, so solid blue lives here and is used only inside
+	 * the @utility bodies below, always under white text.
+	 */
+	--color-accent-deep: #0068ef;
+	/* Blue-tinted hairline. Replaces the old `border-black`, which was a raw Tailwind built-in
+	 * encoding the hard-edge idiom; glass wants a light edge, not a dark one. */
+	--color-edge: rgb(148 180 255 / 0.1);
+	--color-lilac: #7db7ff; /* legacy alias: accent text (zero call sites, kept for compatibility) */
+	--color-ok: #5ec98a;
+	--color-warn: #e3a94a;
+	--color-danger: #ff6b7d;
+	--color-info: #58a7d3;
+	--color-override: #a98cf0;
 
-	--radius-card: 4px;
-	--radius-ctl: 3px;
-	--shadow-glass: 0 4px 12px rgb(0 0 0 / 0.5);
-	--shadow-pop: 0 6px 20px rgb(0 0 0 / 0.65);
+	--radius-card: 10px;
+	--radius-ctl: 7px;
+	/* Declared but unused in the field-terminal skin; the glass skin is what it was left for. */
+	--shadow-glass:
+		0 10px 28px -8px rgb(2 6 14 / 0.72), 0 2px 6px rgb(2 6 14 / 0.4),
+		0 0 0 1px rgb(0 104 239 / 0.05);
+	--shadow-pop:
+		0 18px 44px -12px rgb(2 6 14 / 0.86), 0 4px 12px rgb(2 6 14 / 0.5),
+		0 0 0 1px rgb(0 104 239 / 0.08);
+	--shadow-glow: 0 0 0 1px rgb(0 104 239 / 0.34), 0 0 22px -4px rgb(0 104 239 / 0.42);
 }
 
 @layer base {
@@ -62,9 +80,20 @@
 		outline: 1px solid var(--color-accent);
 		outline-offset: 2px;
 	}
+	/* The shell: a deep navy field with one faint blue bloom, so panels read as lit from above. */
+	body::before {
+		content: '';
+		position: fixed;
+		inset: 0;
+		z-index: -1;
+		pointer-events: none;
+		background:
+			radial-gradient(90rem 48rem at 50% -18rem, rgb(0 104 239 / 0.14), transparent 62%),
+			radial-gradient(60rem 36rem at 88% 4%, rgb(88 167 211 / 0.07), transparent 58%);
+	}
 	select {
 		appearance: none;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238A8A90' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239FC2E8' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 		background-repeat: no-repeat;
 		background-position: right 10px center;
 		padding-right: 30px;
@@ -84,6 +113,10 @@
 	::-webkit-scrollbar-thumb {
 		background: var(--color-ink-700);
 		border: 2px solid var(--color-ink-950);
+		border-radius: 6px;
+	}
+	::-webkit-scrollbar-thumb:hover {
+		background: #1e3253;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		*,
@@ -126,10 +159,27 @@
 	@apply text-[11px] font-semibold tracking-[0.12em] uppercase;
 }
 
-/* Charcoal panel with a hard black edge. */
+/*
+ * The glass module: a dark navy pane with a faint top-edge beam, a hairline blue border and a
+ * soft deep shadow. `position: relative` is load-bearing -- the beam is an ::after overlay.
+ */
 @utility panel {
-	@apply rounded-card border border-black bg-ink-900 p-5;
-	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+	@apply relative rounded-card border border-edge p-5;
+	background:
+		linear-gradient(180deg, rgb(255 255 255 / 0.035), rgb(255 255 255 / 0.01)),
+		linear-gradient(180deg, rgb(10 18 32 / 0.96), rgb(7 13 24 / 0.96));
+	box-shadow:
+		var(--shadow-glass),
+		inset 0 1px 0 rgb(255 255 255 / 0.05);
+	&::after {
+		content: '';
+		position: absolute;
+		inset-inline: 12%;
+		top: -1px;
+		height: 1px;
+		pointer-events: none;
+		background: linear-gradient(90deg, transparent, rgb(125 183 255 / 0.32), transparent);
+	}
 }
 
 /* Small muted heading inside a panel. */
@@ -137,49 +187,103 @@
 	@apply mb-3 block caps text-mist-400;
 }
 
+/* Secondary control: dark glass, faint edge, understated hover. */
 @utility btn {
-	@apply inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-ctl border border-black bg-ink-800 px-3.5 caps whitespace-nowrap text-mist-100 transition;
-	@apply hover:bg-ink-700 hover:text-white active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40;
+	@apply inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-ctl border border-edge px-3.5 caps whitespace-nowrap text-mist-100;
+	@apply transition duration-150 ease-out;
+	@apply active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40;
+	background: linear-gradient(180deg, rgb(255 255 255 / 0.055), rgb(255 255 255 / 0.02));
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+	&:hover:not(:disabled) {
+		border-color: rgb(125 183 255 / 0.28);
+		background: linear-gradient(180deg, rgb(125 183 255 / 0.12), rgb(125 183 255 / 0.05));
+		color: #fff;
+	}
 }
+/*
+ * Primary: solid blue glass under white text. Uses --color-accent-deep rather than `accent`
+ * because the gradient must stay dark enough for white to clear AA -- white on #0068ef is
+ * 4.97:1 and on the #0b4ea8 foot 7.87:1.
+ */
 @utility btn-primary {
-	@apply border-accent bg-accent text-ink-950 hover:border-accent-2 hover:bg-accent-2 hover:text-ink-950;
+	@apply border-transparent text-white;
+	background: linear-gradient(180deg, var(--color-accent-deep), #0b4ea8);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 0.22),
+		0 2px 10px -2px rgb(0 104 239 / 0.5);
+	&:hover:not(:disabled) {
+		background: linear-gradient(180deg, #1c7bff, #0d59bd);
+		box-shadow:
+			inset 0 1px 0 rgb(255 255 255 / 0.26),
+			0 4px 16px -3px rgb(0 104 239 / 0.62);
+		color: #fff;
+	}
 }
 @utility btn-danger {
-	@apply border-danger/60 bg-danger/10 text-danger hover:border-danger hover:bg-danger/20 hover:text-danger;
+	@apply border-danger/45 text-danger;
+	background: linear-gradient(180deg, rgb(255 107 125 / 0.16), rgb(255 107 125 / 0.06));
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+	&:hover:not(:disabled) {
+		border-color: rgb(255 107 125 / 0.75);
+		background: linear-gradient(180deg, rgb(255 107 125 / 0.26), rgb(255 107 125 / 0.12));
+		color: var(--color-danger);
+	}
 }
 @utility btn-ghost {
-	@apply border-transparent bg-transparent text-mist-400 hover:bg-transparent hover:text-mist-100;
+	@apply border-transparent text-mist-400;
+	background: none;
+	box-shadow: none;
+	&:hover:not(:disabled) {
+		border-color: transparent;
+		background: rgb(125 183 255 / 0.08);
+		color: var(--color-mist-100);
+	}
 }
 @utility btn-sm {
 	@apply h-[30px] px-2.5 text-[10px];
 }
 
+/* Inset dark glass field; focus lifts a soft blue ring rather than a hard outline. */
 @utility input {
-	@apply w-full rounded-ctl border border-black bg-ink-950 px-3 py-2 text-[13.5px] text-mist-100 transition placeholder:text-mist-600;
-	@apply focus:border-accent focus:outline-none;
+	@apply w-full rounded-ctl border border-edge px-3 py-2 text-[13.5px] text-mist-100 placeholder:text-mist-600;
+	@apply transition duration-150 ease-out focus:outline-none;
 	/* iOS Safari zooms the page into any focused field smaller than 16px; touch devices get 16px. */
 	@apply pointer-coarse:text-[16px];
-	box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5);
+	background: rgb(3 7 14 / 0.62);
+	box-shadow: inset 0 1px 3px rgb(2 6 14 / 0.66);
+	&:focus {
+		border-color: rgb(125 183 255 / 0.5);
+		background: rgb(3 7 14 / 0.78);
+		box-shadow:
+			inset 0 1px 3px rgb(2 6 14 / 0.66),
+			var(--shadow-glow);
+	}
 }
 
 @utility badge {
-	@apply inline-flex items-center gap-1 rounded-[2px] border border-white/10 bg-white/5 px-1.5 py-0.5 caps text-[10px] leading-tight text-mist-400;
+	@apply inline-flex items-center gap-1 rounded-[4px] border border-edge bg-white/[0.045] px-1.5 py-0.5 caps text-[10px] leading-tight text-mist-400;
 }
 
 @utility chip {
-	@apply inline-block rounded-[2px] bg-white/[0.06] px-1.5 py-0.5 font-mono text-[11.5px];
+	@apply inline-block rounded-[4px] border border-edge bg-white/[0.045] px-1.5 py-0.5 font-mono text-[11.5px];
 }
 
 @utility kv {
-	@apply flex justify-between gap-3 border-b border-white/[0.06] py-2 last:border-0;
+	@apply flex justify-between gap-3 border-b border-edge py-2 last:border-0;
 }
 
 @utility callout {
-	@apply mb-4 rounded-card border border-l-2 border-black border-l-accent bg-ink-900 px-4 py-3 text-[13.5px] leading-relaxed;
+	@apply relative mb-4 rounded-card border border-l-2 border-edge border-l-accent px-4 py-3 text-[13.5px] leading-relaxed;
+	background:
+		linear-gradient(90deg, rgb(0 104 239 / 0.1), transparent 46%),
+		linear-gradient(180deg, rgb(10 18 32 / 0.96), rgb(7 13 24 / 0.96));
+	box-shadow: var(--shadow-glass);
 }
 
 @utility table-wrap {
-	@apply overflow-x-auto rounded-card border border-black bg-ink-950;
+	@apply overflow-x-auto rounded-card border border-edge;
+	background: linear-gradient(180deg, rgb(7 13 24 / 0.86), rgb(5 10 19 / 0.86));
+	box-shadow: var(--shadow-glass);
 }
 
 @utility tabular {
@@ -192,13 +296,13 @@
 }
 @keyframes pulse-ring {
 	0% {
-		box-shadow: 0 0 0 0 rgb(123 196 98 / 0.55);
+		box-shadow: 0 0 0 0 rgb(94 201 138 / 0.55);
 	}
 	70% {
-		box-shadow: 0 0 0 6px rgb(123 196 98 / 0);
+		box-shadow: 0 0 0 6px rgb(94 201 138 / 0);
 	}
 	100% {
-		box-shadow: 0 0 0 0 rgb(123 196 98 / 0);
+		box-shadow: 0 0 0 0 rgb(94 201 138 / 0);
 	}
 }
 
@@ -324,44 +428,56 @@
 	@apply w-full sm:w-auto;
 }
 
-/* Top bar navigation: flat text, brass underline when active. */
+/* Top bar navigation: flat text, blue beam under the active item. */
 @utility nav-pill {
-	@apply relative px-3 py-2 caps text-mist-400 transition hover:text-mist-100;
+	@apply relative px-3 py-2 caps text-mist-400 transition duration-150 hover:text-mist-100;
 }
 @utility nav-pill-active {
 	@apply text-mist-100;
 	box-shadow: inset 0 -2px 0 var(--color-accent);
+	text-shadow: 0 0 16px rgb(125 183 255 / 0.4);
 }
 
 /* Section tabs on a server page. */
 @utility tab-link {
-	@apply -mb-px border-b-2 border-transparent px-3.5 py-2.5 caps whitespace-nowrap text-mist-400 transition hover:text-mist-100;
+	@apply -mb-px border-b-2 border-transparent px-3.5 py-2.5 caps whitespace-nowrap text-mist-400;
+	@apply transition duration-150 hover:text-mist-100;
 }
 @utility tab-link-active {
 	@apply border-accent text-mist-100;
+	text-shadow: 0 0 16px rgb(125 183 255 / 0.4);
 }
 
 @utility menu {
-	@apply absolute top-[calc(100%+6px)] left-0 z-40 min-w-[240px] rise rounded-card border border-black bg-ink-900 p-1 shadow-pop;
+	@apply absolute top-[calc(100%+6px)] left-0 z-40 min-w-[240px] rise rounded-card border border-edge p-1 shadow-pop;
 	@apply max-h-[calc(100dvh-80px)] overflow-y-auto;
 	/* Phones: pin under the header, edge to edge, so a long server name can't push it off-screen. */
 	@apply max-sm:fixed max-sm:inset-x-3 max-sm:top-[64px] max-sm:min-w-0;
+	background: linear-gradient(180deg, rgb(13 22 38 / 0.98), rgb(8 14 26 / 0.98));
+	backdrop-filter: blur(10px);
 }
 @utility menu-item {
-	@apply flex w-full items-center gap-2 rounded-ctl border-l-2 border-transparent px-3 py-2 text-left text-[13px] text-mist-100 transition hover:border-mist-600 hover:bg-ink-800;
+	@apply flex w-full items-center gap-2 rounded-ctl border-l-2 border-transparent px-3 py-2 text-left text-[13px] text-mist-100;
+	@apply transition duration-150;
+	&:hover {
+		border-left-color: var(--color-accent);
+		background: rgb(125 183 255 / 0.1);
+	}
 }
 
 @utility stat-big {
 	@apply flex items-baseline justify-between gap-3 py-1.5;
 }
 @utility pip {
-	@apply inline-block min-w-[86px] rounded-[2px] px-2 py-0.5 text-center caps text-[10px];
+	@apply inline-block min-w-[86px] rounded-[4px] px-2 py-0.5 text-center caps text-[10px];
 }
 @utility progress {
-	@apply h-1 w-full overflow-hidden rounded-none bg-white/[0.08];
+	@apply h-1 w-full overflow-hidden rounded-full bg-white/[0.07];
 }
 @utility progress-bar {
-	@apply block h-full bg-accent transition-[width] duration-500;
+	@apply block h-full rounded-full transition-[width] duration-500;
+	background: linear-gradient(90deg, var(--color-accent-deep), var(--color-accent));
+	box-shadow: 0 0 10px -1px rgb(0 104 239 / 0.6);
 }
 
 @layer components {
@@ -379,16 +495,17 @@
 		}
 	}
 	.table-wrap th {
-		@apply sticky top-0 border-b border-black bg-ink-900 px-3.5 py-2.5 text-left caps whitespace-nowrap text-mist-400;
+		@apply sticky top-0 border-b border-edge px-3.5 py-2.5 text-left caps whitespace-nowrap text-mist-400;
+		background: linear-gradient(180deg, rgb(15 24 40 / 0.98), rgb(10 17 29 / 0.98));
 	}
 	.table-wrap td {
-		@apply border-b border-white/[0.05] px-3.5 py-2.5 align-middle;
+		@apply border-b border-edge px-3.5 py-2.5 align-middle;
 	}
 	.table-wrap tr:last-child td {
 		@apply border-b-0;
 	}
 	.table-wrap tbody tr:hover td {
-		@apply bg-ink-900;
+		background: rgb(125 183 255 / 0.05);
 	}
 	.table-wrap tbody tr.selected td {
 		@apply bg-accent/10;

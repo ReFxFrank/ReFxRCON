@@ -387,15 +387,15 @@
 			</div>
 			<p class="note">
 				{#if data.user.role === 'owner'}
-					The listener must be reachable from the machine running Warcon: keep BindAddress 127.0.0.1
-					when they share a host, otherwise 0.0.0.0 behind a firewall or reverse proxy. As site
-					owner you may point at private addresses; servers other people add must be public.
+					The listener must be reachable from the machine running {data.appName}: keep BindAddress
+					127.0.0.1 when they share a host, otherwise 0.0.0.0 behind a firewall or reverse proxy. As
+					site owner you may point at private addresses; servers other people add must be public.
 				{:else}
 					The host must be publicly reachable: BindAddress 0.0.0.0 behind a firewall that allows
-					Warcon, or a reverse proxy. Private and internal addresses are refused. If the game server
-					shares a machine or network with Warcon, ask the site owner to add it.
+					{data.appName}, or a reverse proxy. Private and internal addresses are refused. If the
+					game server shares a machine or network with {data.appName}, ask the site owner to add it.
 				{/if}
-				https needs a certificate Warcon trusts, or GAME_TLS_INSECURE=true for self-signed.
+				https needs a certificate {data.appName} trusts, or GAME_TLS_INSECURE=true for self-signed.
 			</p>
 			<div class="flex justify-end gap-2 pt-2">
 				<button type="button" class="btn" data-close onclick={() => (dialog = null)}>Cancel</button>

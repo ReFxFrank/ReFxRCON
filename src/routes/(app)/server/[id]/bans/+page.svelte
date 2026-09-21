@@ -167,7 +167,7 @@
 	}
 </script>
 
-<div class="mb-4 panel">
+<div class="panel mb-4">
 	<div class="mb-2 flex flex-wrap items-center gap-2">
 		<span class="label-sm mb-0!">Organisation lists · {data.server.orgName}</span>
 		<span class="ml-auto inline-flex flex-wrap gap-1.5">

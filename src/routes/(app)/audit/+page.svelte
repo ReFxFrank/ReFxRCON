@@ -76,7 +76,7 @@
 
 <h1 class="mb-5 text-xl font-semibold tracking-tight">Audit trail</h1>
 
-<div class="mb-4 panel">
+<div class="panel mb-4">
 	<div class="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
 		<select class="input" bind:value={f.server} onchange={apply} aria-label="Server">
 			<option value="">All servers</option>

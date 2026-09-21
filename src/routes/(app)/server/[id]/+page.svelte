@@ -332,7 +332,7 @@
 	</div>
 </div>
 
-<div class="mt-4 panel">
+<div class="panel mt-4">
 	<div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
 		<span class="label-sm mb-0">Cash in play</span>
 		<span class="text-[12px] text-mist-600"
@@ -357,7 +357,7 @@
 	/>
 </div>
 
-<div class="mt-4 panel" hidden={!showPicker}>
+<div class="panel mt-4" hidden={!showPicker}>
 	<span class="label-sm">Map override</span>
 	<MapPicker bind:this={picker} serverId={id} catalog={data.catalog} disabled={!operator} />
 	<div class="join join-stack mt-4">
@@ -387,7 +387,7 @@
 	</p>
 </div>
 
-<div class="mt-4 panel">
+<div class="panel mt-4">
 	<div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
 		<span class="label-sm mb-0">Scoreboard</span>
 		<div class="join">

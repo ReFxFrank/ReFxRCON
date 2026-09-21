@@ -215,7 +215,7 @@ export async function testWebhook(
 				description: `**${user.username}** connected ${org.name} to this channel. Events: ${(row.events as string[]).join(', ')}.`,
 				color: 0xd4a843,
 				timestamp: new Date().toISOString(),
-				footer: { text: env.APP_NAME || 'Warcon' }
+				footer: { text: env.APP_NAME || 'ReFxRCON' }
 			}
 		]
 	});

@@ -230,7 +230,7 @@
 	<div class="mb-4 flex flex-wrap gap-2">
 		{#each lists.servers as s (s.id)}
 			<div
-				class="rounded-ctl border border-black bg-ink-950 px-3 py-2 text-[12.5px] {s.lastError
+				class="rounded-ctl border border-edge bg-ink-950 px-3 py-2 text-[12.5px] {s.lastError
 					? 'border-l-2 border-l-danger'
 					: ''}"
 			>
@@ -248,7 +248,7 @@
 {/if}
 
 {#if kind === 'reserve'}
-	<div class="mb-4 panel">
+	<div class="panel mb-4">
 		<span class="label-sm">Reserve a slot</span>
 		<form
 			class="flex flex-wrap items-end gap-3"

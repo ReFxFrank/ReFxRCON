@@ -35,7 +35,7 @@
 		{#if data.steam?.avatar}<img
 				src={data.steam.avatar}
 				alt=""
-				class="h-8 w-8 rounded-[2px] border border-black"
+				class="h-8 w-8 rounded-[2px] border border-edge"
 				referrerpolicy="no-referrer"
 			/>{/if}
 		<span class="truncate">{data.name}</span>

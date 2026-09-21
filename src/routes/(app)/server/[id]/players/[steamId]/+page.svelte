@@ -139,7 +139,7 @@
 			{#if d.steam?.avatar}<img
 					src={d.steam.avatar}
 					alt=""
-					class="h-8 w-8 rounded-[2px] border border-black"
+					class="h-8 w-8 rounded-[2px] border border-edge"
 					referrerpolicy="no-referrer"
 				/>{/if}
 			<span class="truncate">{d.name}</span>
@@ -214,7 +214,7 @@
 			{#if c.matches || c.recent.length}
 				<div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
 					{#each [['Matches', fmtNum(c.matches), rankText(c.ranks.minutes) + ' by playtime'], ['Record', `${c.wins}–${c.losses}–${c.draws}`, c.winRate === null ? 'win % after 3 decided' : `${c.winRate}% · ${rankText(c.ranks.winRate)}`], ['Kills', fmtNum(c.kills), rankText(c.ranks.kills)], ['K/D', c.kd.toFixed(2), rankText(c.ranks.kd)], ['Kills / h', c.kph.toFixed(1), rankText(c.ranks.kph)], ['Best match', fmtNum(c.bestKills) + ' kills', c.since ? `since ${fmtTime(c.since).slice(0, 12)}` : '']] as [label, value, sub] (label)}
-						<div class="rounded-ctl border border-black bg-ink-950 px-3 py-2.5">
+						<div class="rounded-ctl border border-edge bg-ink-950 px-3 py-2.5">
 							<div class="caps text-mist-400">{label}</div>
 							<div class="mt-0.5 font-display text-xl font-semibold tabular">{value}</div>
 							<div class="text-[11.5px] text-mist-600">{sub}</div>
@@ -687,7 +687,7 @@
 			{/if}
 			<div class="space-y-2">
 				{#each d.notes as n (n.id)}
-					<div class="rounded-ctl border border-black bg-ink-950 px-3 py-2">
+					<div class="rounded-ctl border border-edge bg-ink-950 px-3 py-2">
 						<div class="mb-1 flex items-center gap-2 text-[12px] text-mist-400">
 							<b class="text-mist-100">{n.authorName || '—'}</b>
 							<span>{fmtTime(n.createdAt)}</span>

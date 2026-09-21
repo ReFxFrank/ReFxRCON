@@ -174,9 +174,7 @@
 		</table>
 	</div>
 	{#if player}
-		<div
-			class="mt-3 rise rounded-ctl border border-l-2 border-black border-l-accent bg-ink-950 p-3"
-		>
+		<div class="mt-3 rise rounded-ctl border border-l-2 border-edge border-l-accent bg-ink-950 p-3">
 			<div class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-0.5">
 				<FactionChip faction={player.faction} scores={status?.scores} />
 				<span class="min-w-0 truncate font-semibold">{player.name}</span>

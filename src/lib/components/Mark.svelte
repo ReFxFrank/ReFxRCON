@@ -2,10 +2,23 @@
 	let { size = 28 }: { size?: number } = $props();
 </script>
 
-<!-- Brass plate with a cut corner and a target reticle: flat, no gradients. -->
+<!--
+	Blue glass plate with a cut corner and a target reticle. The cut corner is the tactical
+	signature; the gradient, hairline and outer bloom are what make it read as glass rather than
+	as a flat badge. Colours come from tokens so the mark reskins with everything else.
+-->
 <span
-	class="inline-flex shrink-0 items-center justify-center bg-accent text-ink-950"
-	style="width:{size}px;height:{size}px;clip-path:polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px))"
+	class="relative inline-flex shrink-0 items-center justify-center text-mist-100"
+	style="
+		width:{size}px;height:{size}px;
+		clip-path:polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+		background:
+			linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.03)),
+			linear-gradient(160deg, var(--color-accent-deep), #0b4ea8 72%, #0a3a80);
+		box-shadow:
+			inset 0 1px 0 rgb(255 255 255 / 0.3),
+			0 2px 10px -2px rgb(0 104 239 / 0.55);
+	"
 	aria-hidden="true"
 >
 	<svg

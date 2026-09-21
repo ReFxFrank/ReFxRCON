@@ -273,7 +273,7 @@ async function discordRequest(
 			body: payload
 				? JSON.stringify({
 						// the username only applies to a new message; an edit keeps the original's
-						...(method === 'POST' ? { username: env.APP_NAME || 'Warcon' } : {}),
+						...(method === 'POST' ? { username: env.APP_NAME || 'ReFxRCON' } : {}),
 						allowed_mentions: { parse: [] },
 						...payload
 					})
@@ -343,7 +343,7 @@ export async function notifyWebhooks(env: Env, row: AuditRow): Promise<void> {
 			if (!events.includes(event)) continue;
 			const only = hook.serverIds as string[] | null;
 			if (only && only.length && (!row.serverId || !only.includes(row.serverId))) continue;
-			embed ??= buildEmbed(env.APP_NAME || 'Warcon', row);
+			embed ??= buildEmbed(env.APP_NAME || 'ReFxRCON', row);
 			enqueue(env, hook, embed);
 		}
 	} catch (err) {

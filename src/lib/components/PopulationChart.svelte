@@ -104,13 +104,13 @@
 			onmouseleave={() => (hover = null)}
 		>
 			{#each yTicks as v (v)}
-				<line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="rgb(255 255 255 / 0.07)" />
+				<line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="var(--color-edge)" />
 				<text
 					x={PAD.l - 6}
 					y={y(v) + 3.5}
 					text-anchor="end"
 					font-size="10"
-					fill="#8a8a90"
+					fill="var(--color-mist-400)"
 					font-family="JetBrains Mono Variable, monospace">{v}</text
 				>
 			{/each}
@@ -120,7 +120,7 @@
 					y={H - 8}
 					text-anchor="middle"
 					font-size="10"
-					fill="#8a8a90"
+					fill="var(--color-mist-400)"
 					font-family="Barlow, sans-serif">{t.label}</text
 				>
 			{/each}
@@ -130,19 +130,19 @@
 					y={PAD.t}
 					width="3"
 					height={H - PAD.t - PAD.b}
-					fill="rgb(216 96 96 / 0.18)"
+					fill="color-mix(in srgb, var(--color-danger) 18%, transparent)"
 				/>
 			{/each}
 			{#each segments as seg, i (i)}
 				{#if seg.length === 1}
 					<!-- A lone bucket has no length to draw; show it as a marker. -->
-					<circle cx={x(seg[0].ts)} cy={y(seg[0].avg!)} r="4" fill="#d4a843" />
+					<circle cx={x(seg[0].ts)} cy={y(seg[0].avg!)} r="4" fill="var(--color-accent)" />
 				{:else}
-					<path d={area(seg)} fill="rgb(212 168 67 / 0.14)" />
+					<path d={area(seg)} fill="color-mix(in srgb, var(--color-accent) 16%, transparent)" />
 					<path
 						d={path(seg)}
 						fill="none"
-						stroke="#d4a843"
+						stroke="var(--color-accent)"
 						stroke-width="2"
 						stroke-linejoin="round"
 					/>
@@ -155,7 +155,7 @@
 					x2={x(p.ts)}
 					y1={PAD.t}
 					y2={H - PAD.b}
-					stroke="#e8e8e8"
+					stroke="var(--color-mist-100)"
 					stroke-width="1"
 					stroke-dasharray="3 3"
 				/>
@@ -164,8 +164,8 @@
 						cx={x(p.ts)}
 						cy={y(p.avg)}
 						r="4"
-						fill="#d4a843"
-						stroke="#1a1a1e"
+						fill="var(--color-accent)"
+						stroke="var(--color-ink-900)"
 						stroke-width="2"
 					/>
 				{/if}
@@ -174,7 +174,7 @@
 		{#if hover !== null}
 			{@const p = points[hover]}
 			<div
-				class="pointer-events-none absolute top-2 rounded-ctl border border-black bg-ink-800 px-2.5 py-1.5 text-[12px] shadow-pop"
+				class="pointer-events-none absolute top-2 rounded-ctl border border-edge bg-ink-800 px-2.5 py-1.5 text-[12px] shadow-pop"
 				style="left:{Math.min(82, Math.max(2, (x(p.ts) / W) * 100))}%; transform:translateX(-50%)"
 			>
 				<div class="font-mono text-mist-400">{fmtTs(p.ts)}</div>

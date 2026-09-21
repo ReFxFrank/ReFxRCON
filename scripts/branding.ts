@@ -1,20 +1,29 @@
-// Generates the Warcon logo set into branding/. Text is traced to outlines from Barlow Condensed
+// Generates the ReFxRCON logo set into branding/. Text is traced to outlines from Barlow Condensed
 // (OFL, see branding/src/OFL.txt) so the SVGs render identically everywhere.
-//   bun run scripts/branding.ts
+//   bun run scripts/branding.ts            # the SVGs
+//   bun run scripts/branding-png.ts        # rasterises them into branding/png/ and static/
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import opentype from 'opentype.js';
 
 const OUT = 'branding';
-const BRASS = '#D4A843';
-const INK = '#0F0F12';
-const MIST = '#E8E8E8';
+// ReFx Glassy. The plate is a blue gradient rather than a flat fill, which is the one structural
+// difference from the brass mark it replaces; ACCENT is the lit top, ACCENT_DEEP the shaded foot.
+const ACCENT = '#0068EF';
+const ACCENT_DEEP = '#0A3A80';
+const INK = '#070B12';
+const MIST = '#EEF6FF';
 
 const font = opentype.parse(
 	readFileSync('branding/src/BarlowCondensed-SemiBold.ttf').buffer.slice(0)
 );
 
-// --- mark: a brass plate with two cut corners and a reticle, 64x64 -----------------------------
+// --- mark: a blue glass plate with two cut corners and a reticle, 64x64 -----------------------
 const PLATE = 'M0 0H48L64 16V64H16L0 48Z';
+/** The plate gradient, as a <defs> block. Standalone files, so a fixed id cannot collide. */
+const PLATE_GRAD = `<defs><linearGradient id="pl" x1="0" y1="0" x2="0.35" y2="1">
+    <stop offset="0" stop-color="${ACCENT}"/><stop offset="0.72" stop-color="#0B4EA8"/>
+    <stop offset="1" stop-color="${ACCENT_DEEP}"/>
+  </linearGradient></defs>`;
 function reticle(color: string) {
 	return `<g fill="none" stroke="${color}" stroke-width="5.5" stroke-linecap="square">
     <circle cx="32" cy="32" r="14.5"/>
@@ -22,8 +31,8 @@ function reticle(color: string) {
   </g>
   <circle cx="32" cy="32" r="3.6" fill="${color}"/>`;
 }
-const markColour = (plate = BRASS, glyph = INK) =>
-	`<path d="${PLATE}" fill="${plate}"/>\n  ${reticle(glyph)}`;
+const markColour = (plate = `url(#pl)`, glyph = MIST) =>
+	`${PLATE_GRAD}\n  <path d="${PLATE}" fill="${plate}"/>\n  ${reticle(glyph)}`;
 /** Single colour: the reticle is punched out of the plate. */
 const markMono = (
 	color: string,
@@ -35,7 +44,7 @@ const svg = (w: number, h: number, body: string, title: string) =>
 	`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${title}">\n  ${body}\n</svg>\n`;
 
 // --- wordmark ----------------------------------------------------------------------------------
-const TEXT = 'WARCON';
+const TEXT = 'REFXRCON';
 const CAP = 40; // cap height in the 64px lockup
 const size = (CAP * font.unitsPerEm) / (font.tables.os2.sCapHeight || 700);
 // Glyph by glyph: font.getPath() can emit a NaN coordinate for some kerned pairs.
@@ -83,7 +92,7 @@ const H = 64;
 const baseline = (H + CAP) / 2; // caps vertically centred on the mark
 function horizontal(mark: string, text: string) {
 	const w = 64 + GAP + wordW;
-	return svg(w, H, `${mark}\n  ${wordmarkPath(text, 64 + GAP, baseline)}`, 'Warcon');
+	return svg(w, H, `${mark}\n  ${wordmarkPath(text, 64 + GAP, baseline)}`, 'ReFxRCON');
 }
 function stacked(mark: string, text: string) {
 	const scale = 1.6;
@@ -94,27 +103,27 @@ function stacked(mark: string, text: string) {
 		w,
 		h,
 		`<g transform="translate(${((w - markSize) / 2).toFixed(2)} 16) scale(${scale})">${mark}</g>\n  ${wordmarkPath(text, (w - wordW) / 2, 16 + markSize + 28 + CAP)}`,
-		'Warcon'
+		'ReFxRCON'
 	);
 }
 
 mkdirSync(OUT, { recursive: true });
 const files: Record<string, string> = {
-	'warcon-mark.svg': svg(64, 64, markColour(), 'Warcon mark'),
-	'warcon-mark-mono-black.svg': svg(64, 64, markMono(INK, 'r'), 'Warcon mark'),
-	'warcon-mark-mono-white.svg': svg(64, 64, markMono('#FFFFFF', 'r'), 'Warcon mark'),
-	'warcon-logo-on-dark.svg': horizontal(markColour(), MIST),
-	'warcon-logo-on-light.svg': horizontal(markColour(), INK),
-	'warcon-logo-mono-black.svg': horizontal(markMono(INK, 'r'), INK),
-	'warcon-logo-mono-white.svg': horizontal(markMono('#FFFFFF', 'r'), '#FFFFFF'),
-	'warcon-stacked-on-dark.svg': stacked(markColour(), MIST),
-	'warcon-stacked-on-light.svg': stacked(markColour(), INK),
-	'warcon-wordmark-on-dark.svg': svg(wordW, CAP + 2, wordmarkPath(MIST, 0, CAP), 'Warcon'),
-	'warcon-wordmark-on-light.svg': svg(wordW, CAP + 2, wordmarkPath(INK, 0, CAP), 'Warcon')
+	'refxrcon-mark.svg': svg(64, 64, markColour(), 'ReFxRCON mark'),
+	'refxrcon-mark-mono-black.svg': svg(64, 64, markMono(INK, 'r'), 'ReFxRCON mark'),
+	'refxrcon-mark-mono-white.svg': svg(64, 64, markMono('#FFFFFF', 'r'), 'ReFxRCON mark'),
+	'refxrcon-logo-on-dark.svg': horizontal(markColour(), MIST),
+	'refxrcon-logo-on-light.svg': horizontal(markColour(), INK),
+	'refxrcon-logo-mono-black.svg': horizontal(markMono(INK, 'r'), INK),
+	'refxrcon-logo-mono-white.svg': horizontal(markMono('#FFFFFF', 'r'), '#FFFFFF'),
+	'refxrcon-stacked-on-dark.svg': stacked(markColour(), MIST),
+	'refxrcon-stacked-on-light.svg': stacked(markColour(), INK),
+	'refxrcon-wordmark-on-dark.svg': svg(wordW, CAP + 2, wordmarkPath(MIST, 0, CAP), 'ReFxRCON'),
+	'refxrcon-wordmark-on-light.svg': svg(wordW, CAP + 2, wordmarkPath(INK, 0, CAP), 'ReFxRCON')
 };
 for (const [name, body] of Object.entries(files)) writeFileSync(`${OUT}/${name}`, body);
 // The app favicon is the mark.
-writeFileSync('static/favicon.svg', svg(64, 64, markColour(), 'Warcon'));
+writeFileSync('static/favicon.svg', svg(64, 64, markColour(), 'ReFxRCON'));
 console.log(
 	`wrote ${Object.keys(files).length} files to ${OUT}/ (wordmark ${wordW}px wide at cap ${CAP})`
 );

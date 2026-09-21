@@ -42,7 +42,7 @@ R=$(req $J1 POST /api/servers "{\"orgId\":\"$ORG\",\"name\":\"Bad PW\",\"host\":
 check org-server-count '"serverCount":2' "$(req $J1 GET /api/orgs)"
 check server-list-no-password '0' "$(req $J1 GET /api/servers | grep -c password_enc)"
 check server-list-demo-flag '"demo":true' "$(req $J1 GET /api/servers)"
-check server-test '"serverName":"Warcon Demo Server' "$(req $J1 POST /api/servers/$SID/test)"
+check server-test '"serverName":"ReFxRCON Demo Server' "$(req $J1 POST /api/servers/$SID/test)"
 check server-test-badpw 'rejected the stored RCON password' "$(req $J1 POST /api/servers/$SID2/test)"
 check server-update '"ok":true' "$(req $J1 PATCH /api/servers/$SID2 '{"name":"Bad PW renamed","password":"demo"}')"
 check server-summary '"scores"' "$(req $J1 GET /api/servers/$SID/summary)"

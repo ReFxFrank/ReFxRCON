@@ -106,7 +106,7 @@ const ROLES = {
 function build(env: Env) {
 	const discord = discordEnabled(env);
 	return betterAuth({
-		appName: env.APP_NAME || 'Warcon',
+		appName: env.APP_NAME || 'ReFxRCON',
 		baseURL: env.ORIGIN,
 		secret: env.BETTER_AUTH_SECRET,
 		database: drizzleAdapter(env.db, {

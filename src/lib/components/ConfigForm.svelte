@@ -92,7 +92,7 @@
 
 <div class="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
 	{#each groups as g (g.name)}
-		<div class="border-b border-black pb-1 caps text-mist-400 md:col-span-2">{g.name}</div>
+		<div class="border-b border-edge pb-1 caps text-mist-400 md:col-span-2">{g.name}</div>
 		{#each g.rows as row (row.id)}
 			{@const first = row.fields[0]}
 			{@const b = badge(first)}

@@ -40,7 +40,7 @@
 			"Join Game" on their name takes you to the same server, faction and squad if there is room.
 		</p>
 	</div>
-	<div class="self-start panel">
+	<div class="panel self-start">
 		<span class="label-sm">{data.publicServer.name}</span>
 		<p class="text-[13px] text-mist-400">
 			Search the browser for the server by name if you would rather not paste the code.

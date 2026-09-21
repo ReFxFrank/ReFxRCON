@@ -451,7 +451,7 @@
 										<div class="flex flex-wrap gap-1.5 max-md:max-w-[240px]">
 											{#each m.grants as g (g.serverId)}
 												<span
-													class="inline-flex items-center gap-1.5 rounded-[2px] border border-black bg-ink-950 py-0.5 pr-1 pl-2 text-[12px]"
+													class="inline-flex items-center gap-1.5 rounded-[2px] border border-edge bg-ink-950 py-0.5 pr-1 pl-2 text-[12px]"
 													>{g.serverName} <RoleBadge role={g.role} /></span
 												>
 											{/each}

@@ -170,7 +170,7 @@
 									{#if r.avatar}<img
 											src={r.avatar}
 											alt=""
-											class="h-5 w-5 rounded-[2px] border border-black"
+											class="h-5 w-5 rounded-[2px] border border-edge"
 											referrerpolicy="no-referrer"
 										/>{/if}
 									<span>{r.name}</span>

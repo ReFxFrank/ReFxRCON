@@ -205,7 +205,7 @@
 	</p>
 </div>
 
-<div class="mt-4 panel">
+<div class="panel mt-4">
 	<span class="label-sm">Add rotation entry</span>
 	<MapPicker bind:this={picker} serverId={id} catalog={data.catalog} disabled={!operator} />
 	<div class="mt-4">

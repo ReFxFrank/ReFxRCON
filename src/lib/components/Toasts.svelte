@@ -15,7 +15,7 @@
 				? 'border-ok/30 bg-ok/15 text-ok'
 				: t.kind === 'err'
 					? 'border-danger/30 bg-danger/15 text-danger'
-					: 'border-black bg-ink-800 text-mist-100'}"
+					: 'border-edge bg-ink-800 text-mist-100'}"
 			onclick={() => dismiss(t.id)}
 		>
 			{t.message}

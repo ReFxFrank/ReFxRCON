@@ -525,7 +525,7 @@ async function execute(client: WardogsClient, plan: SyncPlan, before: Observed):
 				out.observed.bans.push({
 					steamId,
 					reason,
-					bannedBy: 'Warcon',
+					bannedBy: 'ReFxRCON',
 					bannedAtUtc: new Date().toISOString()
 				});
 		} else if (!out.observed.reserved.includes(steamId)) out.observed.reserved.push(steamId);

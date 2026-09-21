@@ -40,7 +40,7 @@
 	></button>
 	<div
 		bind:this={box}
-		class="relative max-h-[calc(100dvh-1.5rem)] w-full rise overflow-y-auto panel shadow-pop {wide
+		class="panel relative max-h-[calc(100dvh-1.5rem)] w-full rise overflow-y-auto shadow-pop {wide
 			? 'max-w-3xl'
 			: 'max-w-lg'}"
 		role="dialog"

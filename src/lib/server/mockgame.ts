@@ -387,7 +387,7 @@ const states = new Map<string, State>();
 function stateFor(key: string): State {
 	let s = states.get(key);
 	if (!s) {
-		s = seed(`Warcon Demo Server [${key.slice(0, 6)}]`);
+		s = seed(`ReFxRCON Demo Server [${key.slice(0, 6)}]`);
 		states.set(key, s);
 	}
 	return s;

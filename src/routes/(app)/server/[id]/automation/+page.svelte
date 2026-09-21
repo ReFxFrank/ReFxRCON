@@ -235,7 +235,7 @@
 		{#each KINDS as k (k.kind)}
 			<button
 				type="button"
-				class="cursor-pointer panel text-left transition hover:border-accent/60"
+				class="panel cursor-pointer text-left transition hover:border-accent/60"
 				onclick={() => open(k.kind)}
 			>
 				<div class="caps text-accent">+ {k.label}</div>
@@ -285,7 +285,7 @@
 				{/if}
 			</div>
 			{#if dry && dryFor === t.id && !form}
-				<div class="mt-3 rounded-ctl border border-black bg-ink-950 p-3">
+				<div class="mt-3 rounded-ctl border border-edge bg-ink-950 p-3">
 					{@render dryResult(dry)}
 				</div>
 			{/if}
@@ -494,7 +494,7 @@
 			{/if}
 
 			{#if dry && dryFor === 'form'}
-				<div class="rounded-ctl border border-black bg-ink-950 p-3">{@render dryResult(dry)}</div>
+				<div class="rounded-ctl border border-edge bg-ink-950 p-3">{@render dryResult(dry)}</div>
 			{/if}
 
 			<div class="flex flex-wrap justify-end gap-2 pt-2">

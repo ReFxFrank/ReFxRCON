@@ -73,7 +73,7 @@
 		{/each}
 	</div>
 
-	<div class="mb-4 panel">
+	<div class="panel mb-4">
 		<div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
 			<span class="label-sm mb-0">Players online</span>
 			<span class="text-[12px] text-mist-600"
@@ -118,7 +118,7 @@
 		{/if}
 	</div>
 
-	<div class="mb-4 panel">
+	<div class="panel mb-4">
 		<div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
 			<span class="label-sm mb-0">Cash in play</span>
 			<span class="text-[12px] text-mist-600"
@@ -191,7 +191,7 @@
 		</div>
 	</div>
 
-	<div class="mb-4 panel">
+	<div class="panel mb-4">
 		<span class="label-sm">Most active players</span>
 		<div class="table-wrap">
 			<table>

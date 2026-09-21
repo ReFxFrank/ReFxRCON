@@ -29,7 +29,7 @@
 
 <svelte:window onclick={closeAll} onkeydown={(e) => e.key === 'Escape' && closeAll()} />
 
-<header class="sticky top-0 z-30 border-b border-black bg-ink-900">
+<header class="sticky top-0 z-30 border-b border-edge bg-ink-900">
 	<div class="page-x flex h-[58px] items-center gap-3">
 		<a
 			href="/"
@@ -42,7 +42,9 @@
 					? 'hidden sm:inline'
 					: ''}">{data.appName}</span
 			>
-			<span class="hidden caps text-mist-600 sm:inline">rcon</span>
+			<!-- Descriptor, not branding: it says what the panel operates on. Upstream read
+			     "WARCON rcon"; under a name that already ends in RCON that was redundant. -->
+			<span class="hidden caps text-mist-600 sm:inline">wardogs</span>
 		</a>
 
 		<div class="relative ml-1 min-w-0 flex-1 sm:flex-none">
@@ -112,7 +114,7 @@
 		<div class="relative ml-auto shrink-0">
 			<button
 				type="button"
-				class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-ctl border border-black bg-accent text-[12px] font-bold text-ink-950"
+				class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-ctl border border-edge bg-accent text-[12px] font-bold text-ink-950"
 				title="@{data.user.username}"
 				aria-haspopup="menu"
 				aria-expanded={userOpen}

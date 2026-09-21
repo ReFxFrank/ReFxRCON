@@ -402,7 +402,7 @@ async function renderBoards(
 	const results: PostResult[] = [];
 	for (const board of boards) {
 		const embeds = buildBoardEmbeds({
-			appName: env.APP_NAME || 'Warcon',
+			appName: env.APP_NAME || 'ReFxRCON',
 			serverName: server.name,
 			status: ctx.status,
 			problem: ctx.problem,

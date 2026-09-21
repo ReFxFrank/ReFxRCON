@@ -43,7 +43,7 @@
 
 <svelte:head><title>{data.server.name} · {data.appName}</title></svelte:head>
 
-<div class="mb-4 rise rounded-card border border-l-[3px] border-black border-l-accent bg-ink-900">
+<div class="mb-4 rise rounded-card border border-l-[3px] border-edge border-l-accent bg-ink-900">
 	<div class="flex flex-wrap items-center gap-3 px-5 py-4">
 		<div class="min-w-0 grow">
 			<h1 class="truncate text-xl font-semibold tracking-tight">{data.server.name}</h1>

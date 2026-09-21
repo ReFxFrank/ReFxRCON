@@ -1,4 +1,4 @@
-// Which game-server addresses Warcon will talk to. Warcon fetches on behalf of whoever added a
+// Which game-server addresses the panel will talk to. It fetches on behalf of whoever added a
 // server, so an entry pointing at 127.0.0.1, the Docker network or the cloud metadata service
 // would turn the panel into a proxy into its own host. Only the site owner may register private
 // targets (a same-box or LAN listener); link-local is never a game server and stays blocked for
@@ -155,7 +155,7 @@ export async function assertReachableTarget(
 	if (priv && !allowPrivate)
 		throw new ApiError(
 			403,
-			`${where(priv)} a private address. Only publicly reachable game servers can be added here. If the game server shares a machine or network with Warcon, ask the site owner to add it.`,
+			`${where(priv)} a private address. Only publicly reachable game servers can be added here. If the game server shares a machine or network with this panel, ask the site owner to add it.`,
 			'blocked_host'
 		);
 	return resolved;
