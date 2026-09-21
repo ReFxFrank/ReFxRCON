@@ -16,8 +16,13 @@ import { CLIENT_IP_HEADER } from './http';
 
 export const authConfigured = (env: Partial<Env> | undefined) => Boolean(env?.BETTER_AUTH_SECRET);
 
-/** Usernames are the login identity; Better Auth still wants an email column, so we synthesise one. */
-export const EMAIL_SUFFIX = '@warcon.invalid';
+/**
+ * Usernames are the login identity; Better Auth still wants an email column, so we synthesise one.
+ * These addresses are keys, not mailboxes: nothing ever sends to them, and no mail must ever be
+ * configured for this suffix. Existing accounts key off it, so changing it after the first account
+ * exists is a data migration, not a rename (build brief, D7).
+ */
+export const EMAIL_SUFFIX = '@refx.gg';
 export const emailFor = (username: string) => `${username.toLowerCase()}${EMAIL_SUFFIX}`;
 
 export const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{1,31}$/i;
@@ -132,7 +137,7 @@ function build(env: Env) {
 		},
 		account: {
 			accountLinking: {
-				// Emails here are placeholders (name@warcon.invalid, <id>@discord.invalid) and Discord is
+				// Emails here are placeholders (name@refx.gg, <id>@discord.invalid) and Discord is
 				// asked for no email at all, so the same-email rule would block every link. Linking is
 				// only ever started by a signed-in user from the account page.
 				allowDifferentEmails: true
