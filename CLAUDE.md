@@ -27,8 +27,16 @@ nothing.
 
 ## Commands
 
+**Bun 1.4+ is required**, not the `>=1.2` that `engines` used to claim. `bun.lock` is
+`lockfileVersion: 2`, which bun 1.3.x cannot parse: it warns `UnknownLockfileVersion`,
+**silently ignores the lockfile**, and rewrites it as v1 with ~60 transitive dependencies
+floated to newer patch versions. CI runs `bun install --frozen-lockfile`, so that rewrite
+is both a broken build and an unreviewed dependency bump. If `git status` shows `bun.lock`
+modified after an install you did not intend as an upgrade, your bun is too old — upgrade
+it and `git checkout -- bun.lock`.
+
 ```bash
-bun install
+bun install --frozen-lockfile   # what CI runs; use this, not bare `bun install`
 bun run dev      # http://localhost:5173  — ORIGIN must match exactly
 bun run build    # adapter-node production build
 bun run start    # bun ./build/index.js   — serves :3000
