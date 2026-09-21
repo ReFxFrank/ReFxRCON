@@ -1,0 +1,1 @@
+ALTER TABLE "servers" ADD COLUMN "join_address" text DEFAULT '' NOT NULL;

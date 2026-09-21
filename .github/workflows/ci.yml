@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: timescale/timescaledb:2.30.0-pg18
+        env:
+          POSTGRES_USER: warcon
+          POSTGRES_PASSWORD: warcon
+          POSTGRES_DB: warcon
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U warcon -d warcon"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://warcon:warcon@127.0.0.1:5432/warcon
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run check
+      - run: bun test
+      - run: bun run build
+      - name: Smoke test the production build
+        env:
+          ORIGIN: http://127.0.0.1:5199
+          PORT: 5199
+          HOST: 127.0.0.1
+          POLL_SECONDS: 5
+        run: |
+          BETTER_AUTH_SECRET=$(openssl rand -base64 32); export BETTER_AUTH_SECRET
+          ENCRYPTION_KEY=$(openssl rand -base64 32); export ENCRYPTION_KEY
+          bun ./build/index.js > server.log 2>&1 &
+          up=0
+          for _ in $(seq 1 60); do
+            if curl -sf "$ORIGIN/api/health" >/dev/null; then up=1; break; fi
+            sleep 1
+          done
+          if [ "$up" != 1 ]; then echo "::error::server did not become healthy within 60s"; exit 1; fi
+          bash scripts/smoke.sh | tee smoke.out
+          grep -q 'failed=0' smoke.out
+      - name: Server log
+        if: failure() && hashFiles('server.log') != ''
+        run: cat server.log
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

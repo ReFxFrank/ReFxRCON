@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "discord_url" text DEFAULT '' NOT NULL;

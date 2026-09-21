@@ -1,0 +1,231 @@
+<script lang="ts">
+	import { enhance } from '$app/forms';
+	import { page } from '$app/state';
+	import { fmtTime } from '$lib/format';
+	import { toast } from '$lib/toast.svelte';
+	import { confirmDialog } from '$lib/confirm.svelte';
+	import Badge from '$lib/components/Badge.svelte';
+	import RoleBadge from '$lib/components/RoleBadge.svelte';
+	import DiscordMark from '$lib/components/DiscordMark.svelte';
+	import type { PageProps } from './$types';
+
+	let { data, form }: PageProps = $props();
+	let forced = $derived(!!page.url.searchParams.get('force') || data.user.mustChangePassword);
+	let busy = $state(false);
+
+	$effect(() => {
+		if (form?.changed) toast('Password changed. Other sessions were signed out.', 'ok');
+		if (form?.set) toast(`Password set. You can now also sign in as @${data.user.username}.`, 'ok');
+		if (form?.revoked) toast('Session revoked.', 'ok');
+		if (form?.unlinked) toast('Discord unlinked.', 'ok');
+		if (form?.steam) toast(form.steamId ? 'SteamID linked.' : 'SteamID removed.', 'ok');
+		if (form?.error) toast(form.error, 'err');
+	});
+</script>
+
+<svelte:head><title>Account · {data.appName}</title></svelte:head>
+
+<h1 class="mb-5 text-xl font-semibold tracking-tight">Account</h1>
+
+{#if forced}
+	<div class="callout">You must set a new password before using the panel.</div>
+{/if}
+
+<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+	<div class="panel">
+		<span class="label-sm">{data.hasPassword ? 'Change password' : 'Set a password'}</span>
+		{#if !data.hasPassword}
+			<p class="mb-2 text-[13px] text-mist-400">
+				This account signs in with Discord. A password lets you sign in with your username as well,
+				and is required before Discord can be unlinked.
+			</p>
+		{/if}
+		<div class="kv">
+			<span class="text-mist-400">Signed in as</span>
+			<span
+				>{data.user.name} <span class="font-mono text-mist-400">@{data.user.username}</span>
+				<RoleBadge role={data.user.role} /></span
+			>
+		</div>
+		<form
+			method="post"
+			action="?/password"
+			class="mt-3 space-y-3"
+			use:enhance={() => {
+				busy = true;
+				return async ({ update }) => {
+					await update({ reset: true });
+					busy = false;
+				};
+			}}
+		>
+			{#if data.hasPassword}
+				<label class="block"
+					><span class="field-label">Current password</span><input
+						class="input"
+						type="password"
+						name="current"
+						autocomplete="current-password"
+						required
+					/></label
+				>
+			{/if}
+			<label class="block"
+				><span class="field-label">New password (10+ characters)</span><input
+					class="input"
+					type="password"
+					name="next"
+					autocomplete="new-password"
+					minlength="10"
+					required
+				/></label
+			>
+			<label class="block"
+				><span class="field-label">Repeat new password</span><input
+					class="input"
+					type="password"
+					name="again"
+					autocomplete="new-password"
+					minlength="10"
+					required
+				/></label
+			>
+			<button class="btn btn-primary" type="submit" disabled={busy}
+				>{data.hasPassword ? 'Change password' : 'Set password'}</button
+			>
+		</form>
+
+		<div class="mt-6 border-t border-white/8 pt-4">
+			<span class="label-sm">Steam</span>
+			<form method="post" action="?/steam" use:enhance class="join w-full">
+				<input
+					class="input font-mono"
+					type="text"
+					name="steamId"
+					inputmode="numeric"
+					maxlength="17"
+					placeholder="SteamID64, e.g. 7656119…"
+					value={data.steamId}
+				/>
+				<button class="btn" type="submit">Save</button>
+			</form>
+			<p class="note">
+				Your own SteamID64 (find it on your Steam profile page or at steamid.io). Organisations that
+				hand their members a reserved slot use it; leave it blank to opt out.
+			</p>
+		</div>
+
+		{#if data.discord}
+			<div class="mt-6 border-t border-white/8 pt-4">
+				<span class="label-sm">Discord</span>
+				{#if data.providers.includes('discord')}
+					<div class="flex items-center gap-3">
+						<Badge tone="ok">linked</Badge>
+						<form method="post" action="?/unlinkDiscord" use:enhance>
+							<button class="btn btn-sm" type="submit">Unlink</button>
+						</form>
+					</div>
+				{:else}
+					<form method="post" action="?/linkDiscord" use:enhance>
+						<button class="btn" type="submit"><DiscordMark />Link Discord for sign-in</button>
+					</form>
+				{/if}
+			</div>
+		{/if}
+	</div>
+
+	<div class="panel">
+		<span class="label-sm">Your sessions</span>
+		<div class="table-wrap">
+			<table>
+				<thead><tr><th>Started</th><th>Last seen</th><th>IP</th><th>Client</th><th></th></tr></thead
+				>
+				<tbody>
+					{#each data.sessions as s (s.id)}
+						<tr>
+							<td class="whitespace-nowrap">{fmtTime(s.createdAt)}</td>
+							<td class="whitespace-nowrap">{fmtTime(s.updatedAt)}</td>
+							<td class="font-mono text-[12px]">{s.ip}</td>
+							<td class="max-w-[160px] truncate text-mist-400" title={s.userAgent}
+								>{s.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 28)}</td
+							>
+							<td class="text-right">
+								{#if s.current}
+									<Badge tone="ok">this session</Badge>
+								{:else}
+									<form method="post" action="?/revoke" use:enhance>
+										<input type="hidden" name="id" value={s.id} />
+										<button class="btn btn-sm btn-danger" type="submit">Revoke</button>
+									</form>
+								{/if}
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	</div>
+
+	<div class="panel lg:col-span-2">
+		<span class="label-sm">Delete account</span>
+		<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+			<div class="space-y-2 text-[13px] leading-relaxed text-mist-400">
+				<p>
+					This removes your account, sign-in credentials, sessions, server roles and organisation
+					memberships straight away. It cannot be undone.
+				</p>
+				<p>
+					Audit entries you caused are kept for the record but stripped of your name, IP address and
+					browser. Organisations and servers you created stay with their other owners. You cannot
+					delete your account while you are the only owner of an organisation, or the only site
+					owner.
+				</p>
+			</div>
+			<form
+				method="post"
+				action="?/deleteAccount"
+				class="space-y-3"
+				use:enhance={async ({ cancel }) => {
+					const ok = await confirmDialog(
+						'Delete your account and everything it can sign in to? This cannot be undone.',
+						{ title: 'Delete account', okLabel: 'Delete my account', danger: true }
+					);
+					if (!ok) {
+						cancel();
+						return;
+					}
+					busy = true;
+					return async ({ update }) => {
+						await update();
+						busy = false;
+					};
+				}}
+			>
+				{#if data.hasPassword}
+					<label class="block"
+						><span class="field-label">Your password</span><input
+							class="input"
+							type="password"
+							name="password"
+							autocomplete="current-password"
+							required
+						/></label
+					>
+				{:else}
+					<label class="block"
+						><span class="field-label">Type your username (@{data.user.username}) to confirm</span
+						><input
+							class="input"
+							type="text"
+							name="confirm"
+							autocomplete="off"
+							spellcheck="false"
+							required
+						/></label
+					>
+				{/if}
+				<button class="btn btn-danger" type="submit" disabled={busy}>Delete my account</button>
+			</form>
+		</div>
+	</div>
+</div>

@@ -1,0 +1,46 @@
+import { getEnv } from '$lib/server/env';
+import { apiJson, param, readJson, route } from '$lib/server/http';
+import { requireOrgRole, requireOwner } from '$lib/server/access';
+import {
+	deleteOrg,
+	setMembersReserved,
+	setOrgControls,
+	setOrgDiscord,
+	updateOrg
+} from '$lib/server/orgs';
+
+/**
+ * {name} or {membersReserved} for org owners; {serverLimit, suspended, reason, allowStats,
+ * allowPublicStatus, allowPublicStats} for the site owner only.
+ */
+export const PATCH = route(async (event) => {
+	const env = getEnv();
+	const body = await readJson(event.request);
+	const { org, user } = await requireOrgRole(env, event.locals, param(event, 'id'), 'owner');
+	if (
+		body.serverLimit !== undefined ||
+		body.suspended !== undefined ||
+		body.allowStats !== undefined ||
+		body.allowPublicStatus !== undefined ||
+		body.allowPublicStats !== undefined
+	) {
+		requireOwner(event.locals);
+		await setOrgControls(env, event.request, user, org, body);
+	} else if (body.membersReserved !== undefined) {
+		const sync = await setMembersReserved(env, event.request, user, org, !!body.membersReserved);
+		return apiJson({ ok: true, sync });
+	} else if (body.discordUrl !== undefined) {
+		const discordUrl = await setOrgDiscord(env, event.request, user, org, body.discordUrl);
+		return apiJson({ ok: true, discordUrl });
+	} else {
+		await updateOrg(env, event.request, user, org, body);
+	}
+	return apiJson({ ok: true });
+});
+
+export const DELETE = route(async (event) => {
+	const env = getEnv();
+	const { org, user } = await requireOrgRole(env, event.locals, param(event, 'id'), 'owner');
+	await deleteOrg(env, event.request, user, org);
+	return apiJson({ ok: true });
+});
