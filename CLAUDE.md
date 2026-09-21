@@ -7,12 +7,28 @@ inherited code from ReFx changes.
 
 ## Read this first
 
-Upstream is a single squashed commit with no maintenance track record. **We own this fork
-outright.** Do not expect upstream fixes, do not plan around upstream merges, and do not
-assume an upstream bug will be someone else's to fix. Fifteen sequential migrations and a
-commit message about "audit findings" imply real iteration that was flattened before
-publication — the code is better than its git history suggests, but the history tells you
-nothing.
+**We own this fork outright.** Do not expect upstream fixes, do not plan around upstream
+merges, and do not assume an upstream bug will be someone else's to fix.
+
+The reason is not the one you may have been told. The build brief states that upstream "has
+a single squashed commit dated 2026-09-16" with "no maintenance track record to read". That
+is an artefact of a `--depth 1` clone. Upstream actually has **34 commits spanning
+2026-09-08 to 2026-09-16** by two authors, and the record is worth reading — several
+commits are explicitly security work:
+
+```
+40e3ce9  Use same-origin referrer policy so plain form posts keep their Origin header
+38f676c  Close the Better Auth HTTP surface, keep secrets out of the audit log, fix startup config
+20477c4  Fix the audit findings in match tracking and the public surface
+```
+
+`git log upstream/main` reads normally here because this fork was unshallowed on purpose.
+When you need to know why a line exists, that history will usually tell you.
+
+What _is_ true is that the project is **nine days old**, written by a very small team, and
+has no release cadence to plan around. That is the real argument for owning the fork — youth
+and bus factor, not opacity. Judge upstream on the code and its tests, which are good, and
+on the fact that nobody has yet had to maintain it.
 
 ## Stack
 
