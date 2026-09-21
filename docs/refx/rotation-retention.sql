@@ -87,11 +87,12 @@ d0 AS (
 -- toward its time-of-day norm, so a map that always follows a popular one bleeds through
 -- reversion alone. ccu_start is measured before the map's ten minutes elapse, so conditioning on
 -- it is legitimate. ccu_10 is the outcome; never condition on that.
+-- The slope itself is NOT fitted here. See section 2: fitting it before the map effects lets it
+-- absorb them, because a map that always follows the popular map always starts high.
 sc AS (SELECT slot, AVG(ccu_start)::numeric AS slot_ccu FROM d0 GROUP BY slot),
-dx AS (SELECT d0.*, (d0.ccu_start - sc.slot_ccu) AS excess FROM d0 JOIN sc USING (slot)),
-sl AS (SELECT COALESCE(regr_slope(delta, excess), 0)::numeric AS g FROM dx)
-SELECT dx.id, dx.map, dx.slot, dx.day, (dx.delta - sl.g * dx.excess)::numeric AS y
-  FROM dx, sl;
+dx AS (SELECT d0.*, (d0.ccu_start - sc.slot_ccu) AS excess FROM d0 JOIN sc USING (slot))
+SELECT dx.id, dx.map, dx.slot, dx.day, dx.delta, dx.excess
+  FROM dx;
 
 CREATE INDEX ON rr_d (map);
 CREATE INDEX ON rr_d (slot);
@@ -99,6 +100,15 @@ CREATE INDEX ON rr_d (slot);
 -- ---------------------------------------------------------------------------------------------
 -- 2. Two-way additive fit, y = mu + slot effect + map effect, by alternating least squares.
 -- ---------------------------------------------------------------------------------------------
+-- delta = mu + slot + map + g * excess, with ALL THREE blocks alternating.
+--
+-- The slope is one of the blocks, not a pre-step. Fitting it first, on raw delta, is the obvious
+-- arrangement and it is wrong: rotation is ordered, so a map that always follows the popular map
+-- always starts high, which makes `excess` collinear with map identity and lets the slope absorb
+-- the map's own effect. Measured on a fixture where one map both started high and truly shed 2.5
+-- players: -2.49 with no head start, -0.44 with a moderate one, -0.09 with a strong one. An 82%
+-- attenuation saying "this map is fine" about the worst map in the rotation.
+--
 -- ITERATED TO CONVERGENCE, not a fixed number of passes. On an unbalanced design -- which every
 -- real rotation is, because maps do not appear evenly across the clock -- three passes leaves a
 -- large part of the slot effect still charged to the maps. Measured on a fixture with known
@@ -108,27 +118,39 @@ DROP TABLE IF EXISTS rr_beta;
 CREATE TEMP TABLE rr_alpha (slot int PRIMARY KEY, a numeric);
 CREATE TEMP TABLE rr_beta (map text PRIMARY KEY, b numeric);
 
+DROP TABLE IF EXISTS rr_g;
+CREATE TEMP TABLE rr_g (g numeric);
+
 DO $$
 DECLARE
   mu numeric;
+  g numeric := 0;
+  g_new numeric;
   moved numeric;
   i int := 0;
 BEGIN
-  SELECT AVG(y) INTO mu FROM rr_d;
+  SELECT AVG(delta) INTO mu FROM rr_d;
   INSERT INTO rr_beta SELECT map, 0::numeric FROM rr_d GROUP BY map;
 
   LOOP
     i := i + 1;
 
     CREATE TEMP TABLE rr_alpha_new AS
-      SELECT d.slot, AVG(d.y - mu - COALESCE(b.b, 0)) AS a
+      SELECT d.slot, AVG(d.delta - mu - COALESCE(b.b, 0) - g * d.excess) AS a
         FROM rr_d d LEFT JOIN rr_beta b USING (map) GROUP BY d.slot;
 
     CREATE TEMP TABLE rr_beta_new AS
-      SELECT d.map, AVG(d.y - mu - COALESCE(a.a, 0)) AS b
+      SELECT d.map, AVG(d.delta - mu - COALESCE(a.a, 0) - g * d.excess) AS b
         FROM rr_d d LEFT JOIN rr_alpha_new a USING (slot) GROUP BY d.map;
 
+    SELECT COALESCE(regr_slope(d.delta - mu - COALESCE(a.a, 0) - COALESCE(b.b, 0), d.excess), 0)
+      INTO g_new
+      FROM rr_d d
+      LEFT JOIN rr_alpha_new a USING (slot)
+      LEFT JOIN rr_beta_new b USING (map);
+
     SELECT GREATEST(
+             ABS(g_new - g),
              COALESCE((SELECT MAX(ABS(n.a - COALESCE(o.a, 0))) FROM rr_alpha_new n
                          LEFT JOIN rr_alpha o USING (slot)), 0),
              COALESCE((SELECT MAX(ABS(n.b - COALESCE(o.b, 0))) FROM rr_beta_new n
@@ -141,9 +163,13 @@ BEGIN
     INSERT INTO rr_beta SELECT map, b FROM rr_beta_new;
     DROP TABLE rr_alpha_new;
     DROP TABLE rr_beta_new;
+    g := g_new;
 
     EXIT WHEN moved < 1e-9 OR i >= 500;
   END LOOP;
+
+  DELETE FROM rr_g;
+  INSERT INTO rr_g VALUES (g);
 
   IF i >= 500 THEN
     RAISE WARNING 'rotation-retention: fit hit the 500-pass cap without settling (moved=%)', moved;
@@ -181,9 +207,10 @@ SELECT node AS member, MIN(root) AS component FROM reach GROUP BY node;
 -- 4. Residuals, day-clustered standard errors, and the reasons a number is withheld.
 -- ---------------------------------------------------------------------------------------------
 WITH p AS (SELECT 20::int AS min_matches),
-mu AS (SELECT AVG(y) AS mu FROM rr_d),
+mu AS (SELECT AVG(delta) AS mu FROM rr_d),
 r AS (
-  SELECT d.id, d.map, d.day, d.y - COALESCE(a.a, 0) - (SELECT mu FROM mu) AS raw
+  SELECT d.id, d.map, d.day,
+         d.delta - (SELECT g FROM rr_g) * d.excess - COALESCE(a.a, 0) - (SELECT mu FROM mu) AS raw
     FROM rr_d d LEFT JOIN rr_alpha a USING (slot)
 ),
 cnt AS (SELECT map, COUNT(*)::numeric AS n FROM rr_d GROUP BY map),

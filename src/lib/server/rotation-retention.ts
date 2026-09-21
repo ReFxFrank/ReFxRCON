@@ -345,7 +345,7 @@ function fit(rows: RetentionMatch[], opts: ScoreOptions): Fit {
 		};
 	}
 
-	// --- control for starting population, as a deviation from the slot's own norm --------------
+	// --- the starting-population covariate --------------------------------------------------
 	// Reversion is toward the time-of-day norm, not the global mean, so the covariate is the
 	// excess over the slot average rather than over the grand average.
 	const slotCcu = meansBy(
@@ -354,52 +354,68 @@ function fit(rows: RetentionMatch[], opts: ScoreOptions): Fit {
 		(r) => r.ccuStart
 	);
 	const excess = kept.map((r) => r.ccuStart - (slotCcu.get(r.slot) ?? r.ccuStart));
-	const g = slope(
-		excess,
-		kept.map((r) => r.delta)
-	);
-	const y = kept.map((r, i) => r.delta - g * excess[i]);
+	const delta = kept.map((r) => r.delta);
 
 	/*
-	 * Two-way additive fit, y = mu + slot effect + map effect, by alternating least squares.
+	 * Three-block alternating least squares for delta = mu + slot + map + g * excess.
 	 *
-	 * A single pass of per-slot averaging would BE the self-baseline this whole module exists to
-	 * avoid, so the two effect sets are alternated until they stop moving. "Until they stop
-	 * moving" is load-bearing and a fixed pass count is not enough: on an unbalanced design --
-	 * which every real rotation is, because maps do not appear evenly across the clock -- three
-	 * passes leaves a large part of the slot effect still charged to the maps. Measured on a
-	 * fixture with known truth, three passes reported +1.30 for a map whose true effect was
-	 * +0.50, and -3.37 for one whose truth was -2.50. It settles around forty.
+	 * All THREE blocks alternate, and the slope is one of them. Fitting the slope first, on raw
+	 * delta, and then fitting the map effects to the leftovers is the obvious arrangement and it
+	 * is wrong: rotation is ordered, so a map that always follows the popular map always starts
+	 * high, which makes `excess` collinear with map identity. The slope then absorbs the map's
+	 * own effect and the map reads as fine. Measured on a fixture where one map both started
+	 * systematically high and truly shed 2.5 players against the average:
 	 *
-	 * Each pass is O(n) over a few thousand rows, so iterating to a tolerance costs nothing
-	 * worth measuring. `passes` is the CAP, not the count.
+	 *   head start     slope fitted first     slope inside the fit
+	 *   none                       -2.49                    -2.49
+	 *   moderate                   -0.44                    -2.47
+	 *   strong                     -0.09                    -2.44
+	 *
+	 * An 82% attenuation, in the direction that says "this map is fine" about the worst map in
+	 * the rotation. Inside the loop the slope is identified from within-map variation only,
+	 * which is the reversion it is meant to capture.
+	 *
+	 * "Until they stop moving" is load-bearing and a fixed pass count is not enough: on an
+	 * unbalanced design -- which every real rotation is -- three passes leaves a large part of
+	 * the slot effect still charged to the maps (+1.30 reported for a true +0.50). It settles
+	 * around forty. Each pass is O(n) over a few thousand rows, so iterating to a tolerance
+	 * costs nothing worth measuring. `passes` is the CAP, not the count.
 	 */
-	const mu = mean(y);
+	const mu = mean(delta);
 	const b = new Map<string | number, number>();
 	let a = new Map<string | number, number>();
+	let g = 0;
 	let converged = false;
 	for (let pass = 0; pass < passes; pass++) {
 		const nextA = meansBy(
-			kept.map((r, i) => ({ r, v: y[i] - mu - (b.get(r.key) ?? 0) })),
+			kept.map((r, i) => ({ r, v: delta[i] - mu - (b.get(r.key) ?? 0) - g * excess[i] })),
 			(x) => x.r.slot,
 			(x) => x.v
 		);
 		const nextB = meansBy(
-			kept.map((r, i) => ({ r, v: y[i] - mu - (nextA.get(r.slot) ?? 0) })),
+			kept.map((r, i) => ({ r, v: delta[i] - mu - (nextA.get(r.slot) ?? 0) - g * excess[i] })),
 			(x) => x.r.key,
 			(x) => x.v
 		);
-		let moved = 0;
+		const nextG = slope(
+			excess,
+			kept.map((r, i) => delta[i] - mu - (nextA.get(r.slot) ?? 0) - (nextB.get(r.key) ?? 0))
+		);
+		let moved = Math.abs(nextG - g);
 		for (const [k, v] of nextA) moved = Math.max(moved, Math.abs(v - (a.get(k) ?? 0)));
 		for (const [k, v] of nextB) moved = Math.max(moved, Math.abs(v - (b.get(k) ?? 0)));
 		a = nextA;
 		b.clear();
 		for (const [k, v] of nextB) b.set(k, v);
+		g = nextG;
 		if (moved < FIT_TOLERANCE) {
 			converged = true;
 			break;
 		}
 	}
+
+	/** delta with the fitted population slope removed; what the residuals are measured from. */
+	const y = kept.map((r, i) => delta[i] - g * excess[i]);
 
 	/*
 	 * The zero point is the unweighted average map, not the average match: otherwise a map

@@ -51,7 +51,7 @@ bars happen to be in.
 | --- | --- | --- |
 | Time of day | A map that rotates in at 3am always looks terrible | Matches are bucketed into weekend-flag × hour-of-day (48 buckets) and a slot effect is fitted |
 | Headroom | A full server cannot grow, so popular maps at peak look flat | Matches starting above 90% of `max_players` are excluded and counted |
-| Starting population | Rotation is ordered, so each map has a fixed predecessor and a systematically different start; population reverts toward its time-of-day norm, so a map following a popular one bleeds through reversion alone | The excess of `ccu_start` over the slot's own norm enters as a covariate |
+| Starting population | Rotation is ordered, so each map has a fixed predecessor and a systematically different start; population reverts toward its time-of-day norm, so a map following a popular one bleeds through reversion alone | The excess of `ccu_start` over the slot's own norm enters as a covariate — fitted **inside** the alternating loop, not before it |
 | The baseline containing the map being scored | **This one inverts answers** | Slot and map effects are fitted jointly, by alternating least squares run **to convergence**, rather than a slot average taken over the same rows being scored |
 
 ### The one that inverts answers
@@ -78,6 +78,30 @@ inflated by more than half a player at the same time.
 
 `rotation-retention.test.ts` keeps both columns as a regression test, so the failure cannot
 come back quietly.
+
+### The population slope is part of the fit, not a pre-step
+
+The obvious arrangement is: remove the starting-population effect first, then fit the map effects
+to what is left. That is wrong, and wrong in the direction that matters.
+
+Rotation is **ordered**, so a map that always follows the popular map always starts high. That
+makes the starting-population covariate collinear with map identity — and a slope fitted on raw
+delta absorbs the map's own effect along with the reversion it is meant to capture. Measured on a
+fixture where one map both started systematically high and truly shed 2.5 players against the
+average map:
+
+| Head start | Slope fitted first | Slope inside the fit |
+| --- | --- | --- |
+| none | −2.49 | −2.49 |
+| moderate | **−0.44** | −2.47 |
+| strong | **−0.09** | −2.44 |
+
+An 82% attenuation, reported as "this map is fine" about the worst map in the rotation — and the
+worse the map's rotation position, the more of its effect disappears.
+
+So the slope is one of **three** alternating blocks, with the slot and map effects:
+`delta = mu + slot + map + g × excess`. Inside the loop it is identified from within-map variation
+only, which is the reversion it was always supposed to measure.
 
 ### The fit has to actually converge
 

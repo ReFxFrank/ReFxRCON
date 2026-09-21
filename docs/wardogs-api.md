@@ -3,8 +3,8 @@
 Reverse-engineered on 2026-09-08 from the official web console at `http://rcon.wardogs.com`
 (`js/api.js`, `js/mock-server.js`, `js/config-editor.js`, `ServerSettings.ini`). The console is a
 static, plain-HTTP-only site that talks to the game server **directly from the browser**, which is
-why it cannot be served over HTTPS. Warcon moves that traffic server-side: browsers talk HTTPS to
-Warcon, and Warcon's own process talks plain HTTP to the listener.
+why it cannot be served over HTTPS. ReFxRCON moves that traffic server-side: browsers talk HTTPS to
+ReFxRCON, and ReFxRCON's own process talks plain HTTP to the listener.
 
 ## Transport
 
@@ -13,7 +13,7 @@ Warcon, and Warcon's own process talks plain HTTP to the listener.
   ini (or auto-generated into `Saved/RCON/ADMIN-PASSWORD.txt`), or a pre-hashed `PasswordHash=`.
 * `BindAddress=127.0.0.1` allows a plaintext password. `0.0.0.0` "needs TLS + PasswordHash"
   according to the ini comments, yet the official console only ever uses `http://`. In practice
-  hosts put the listener behind a reverse proxy or expose it plain. Warcon supports both schemes.
+  hosts put the listener behind a reverse proxy or expose it plain. ReFxRCON supports both schemes.
 * Errors: non-2xx with JSON `{ "error": { "code", "message" } }`. Success bodies for mutations are
   usually `{ "message": "..." }`.
 * Config routes use `text/plain` bodies and `If-Match: "<revision>"`; `412` means revision mismatch.
@@ -59,7 +59,7 @@ Warcon, and Warcon's own process talks plain HTTP to the listener.
 | PUT | `/v1/config?force=true&fullApply=true` | text/plain ini, `If-Match: "rev"` | `{ ok, revision, outcomes:[{section,state,detail}], shadowed[], stripped[], errors[], changed[], conflict[], warnings[], timingsMs }` | `state` ∈ `applied`, `next-match`, `next-restart`, `pending`. 412 on revision mismatch unless `force`. |
 
 "Set as next map" is not a route: the console finds (or adds) the selection in the rotation and
-moves it into the slot after the `now` entry with repeated `/move` calls. Warcon does the same server-side.
+moves it into the slot after the `now` entry with repeated `/move` calls. ReFxRCON does the same server-side.
 
 ## ServerSettings.ini keys the server honours
 
@@ -80,5 +80,5 @@ config document (PUT `/v1/config`) or by editing the ini and restarting.
 ## Steam lookup sidecar
 
 The console optionally calls `GET /api/steam/profiles?ids=a,b,c` with header `X-Steam-Api-Key` on
-whatever host serves it, expecting `{ "<steamId>": { name, avatar } }`. Warcon implements the same
+whatever host serves it, expecting `{ "<steamId>": { name, avatar } }`. ReFxRCON implements the same
 route using a server-side `STEAM_API_KEY` secret instead of a per-browser key.

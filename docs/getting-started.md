@@ -1,9 +1,9 @@
-# Getting started with Warcon
+# Getting started with ReFxRCON
 
 This is the short, plain-language version. If you are comfortable with Docker and `.env` files, the
 [README](../README.md) has everything in more detail.
 
-Warcon is a web page you host yourself. You open it in a browser, log in, and control your WARDOGS
+ReFxRCON is a web page you host yourself. You open it in a browser, log in, and control your WARDOGS
 servers from there. Nobody on your team needs the RCON password; they get their own login instead.
 
 ## What you need
@@ -22,16 +22,16 @@ any shell on Linux). Copy and paste them exactly.
 ## Step 1: get the files
 
 ```bash
-git clone https://github.com/warcon-app/warcon.git warcon
-cd warcon
+git clone https://github.com/ReFxFrank/ReFxRCON.git refxrcon
+cd refxrcon
 ```
 
-No git? Download the ZIP from <https://github.com/warcon-app/warcon>, unzip it, and open a terminal
+No git? Download the ZIP from <https://github.com/ReFxFrank/ReFxRCON>, unzip it, and open a terminal
 in that folder.
 
 ## Step 2: create the settings file
 
-Warcon reads its settings from a file called `.env`. Start from the example:
+ReFxRCON reads its settings from a file called `.env`. Start from the example:
 
 ```bash
 cp .env.example .env
@@ -86,7 +86,7 @@ To see what it is doing:
 docker compose logs -f
 ```
 
-Press `Ctrl+C` to stop watching. Warcon keeps running in the background and restarts by itself if
+Press `Ctrl+C` to stop watching. ReFxRCON keeps running in the background and restarts by itself if
 the machine reboots.
 
 ## Step 4: create your owner account
@@ -101,7 +101,7 @@ organisation.
 
 ## Step 5: try the demo server first
 
-Warcon ships with a fake game server so you can click around before touching a real one. Go to
+ReFxRCON ships with a fake game server so you can click around before touching a real one. Go to
 **Servers → Add server** and enter:
 
 | Field         | Value  |
@@ -163,7 +163,7 @@ instead.
 
 ### Letting other clans in
 
-Running Warcon for more than your own clan? Set `ALLOW_ORG_SIGNUP=true` in `.env`. The sign-in page
+Running ReFxRCON for more than your own clan? Set `ALLOW_ORG_SIGNUP=true` in `.env`. The sign-in page
 then offers **Create your own organisation**, where anyone can sign up and start their own org
 with their own servers and invite links. You remain site owner over all of them.
 
@@ -184,12 +184,12 @@ Port=7776
 Password=pick-a-long-random-password
 ```
 
-Restart the game server afterwards. Then make sure Warcon's machine is allowed to reach port `7776`
+Restart the game server afterwards. Then make sure ReFxRCON's machine is allowed to reach port `7776`
 on the game server. On most hosting providers this is a firewall or "ports" page in their control
-panel; allow only the IP address of the machine running Warcon, not the whole internet. The RCON
+panel; allow only the IP address of the machine running ReFxRCON, not the whole internet. The RCON
 password travels with every request, so the firewall is what keeps it private.
 
-If Warcon runs on the same machine as the game server, you can keep `BindAddress=127.0.0.1` instead.
+If ReFxRCON runs on the same machine as the game server, you can keep `BindAddress=127.0.0.1` instead.
 Then open `docker-compose.yml`, remove the `#` from the two `extra_hosts` lines, run
 `docker compose up -d` again, and use `host.docker.internal` as the Host when adding the server.
 
@@ -223,15 +223,15 @@ page.** `ORIGIN` in `.env` does not match the address in your browser. Fix it, t
 
 ### If Test fails
 
-- **Cannot connect / timed out.** Warcon's machine cannot reach the game server's RCON port. Check
+- **Cannot connect / timed out.** ReFxRCON's machine cannot reach the game server's RCON port. Check
   `bEnabled=True`, `BindAddress`, the port number, that the game server was restarted after editing
   the ini, and the firewall on the game host.
 - **401 / unauthorized.** Wrong RCON password. Copy it again from `ServerSettings.ini`.
-- **It works from the official console but not from Warcon.** The official console runs from your
-  browser, so it uses your PC's IP. Warcon uses the IP of the machine it runs on. Allow that IP in
+- **It works from the official console but not from ReFxRCON.** The official console runs from your
+  browser, so it uses your PC's IP. ReFxRCON uses the IP of the machine it runs on. Allow that IP in
   the game host's firewall too.
 
-**I want to start over.** This deletes all Warcon data, including users and the audit trail. Your
+**I want to start over.** This deletes all ReFxRCON data, including users and the audit trail. Your
 game servers are not affected.
 
 ```bash

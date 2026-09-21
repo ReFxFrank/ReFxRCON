@@ -1,13 +1,22 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="branding/warcon-logo-on-dark.svg">
-    <img src="branding/warcon-logo-on-light.svg" alt="Warcon" height="72">
+    <source media="(prefers-color-scheme: dark)" srcset="branding/refxrcon-logo-on-dark.svg">
+    <img src="branding/refxrcon-logo-on-light.svg" alt="ReFxRCON" height="72">
   </picture>
 </p>
 
-# Warcon
+# ReFxRCON
 
-A self-hostable, multi-server RCON panel for **WARDOGS** dedicated servers. Bun, SvelteKit and
+A multi-server RCON and analytics panel for **WARDOGS** dedicated servers.
+
+> **This is a fork** of [warcon](https://github.com/Esprit-De-Corps-Gaming/warcon) (MIT), merged
+> at upstream commit `20477c4` with history preserved, and owned outright — upstream is young and
+> written by a very small team, so no upstream fixes are expected. ReFx changes: the Glassy
+> reskin, the rotation-retention analytic, 120-day sample retention, and the runbooks under
+> [`docs/refx/`](docs/refx/). Start at [`CLAUDE.md`](CLAUDE.md) for the rules and the decision
+> register, or [`docs/refx/README.md`](docs/refx/README.md) for operations.
+
+Bun, SvelteKit and Postgres/TimescaleDB, deployed with Docker Compose. Bun, SvelteKit and
 Postgres/TimescaleDB, deployed with Docker Compose. Run it beside your game server, on any VPS, or
 on a container host, with the database wherever you like.
 
@@ -91,14 +100,14 @@ More in [docs/screenshots/](docs/screenshots/): the [dashboard](docs/screenshots
 ## How it works
 
 ```
-browser ──HTTPS──▶ Warcon (Bun + SvelteKit) ──HTTP──▶ game server :7776 (WDRCON)
+browser ──HTTPS──▶ ReFxRCON (Bun + SvelteKit) ──HTTP──▶ game server :7776 (WDRCON)
                      │  server-rendered pages, /api/* JSON, /api/auth/* (Better Auth)
                      │  poller: status + players every POLL_SECONDS → samples, sessions, matches
                      └─ Postgres (Drizzle schema; TimescaleDB hypertable + retention for samples)
 ```
 
 The official console calls the game server straight from the browser over plain HTTP, so it cannot
-be hosted on HTTPS and every admin needs the raw RCON password. Warcon keeps the password
+be hosted on HTTPS and every admin needs the raw RCON password. ReFxRCON keeps the password
 server-side (AES-GCM encrypted), authenticates admins with its own accounts, checks the role for
 every action, and writes an audit row before answering.
 
@@ -109,7 +118,7 @@ New to this? [docs/getting-started.md](docs/getting-started.md) walks through it
 Prerequisites: Docker with Compose.
 
 ```bash
-git clone <this repo> warcon && cd warcon
+git clone <this repo> refxrcon && cd refxrcon
 cp .env.example .env
 # edit .env: set BETTER_AUTH_SECRET and ENCRYPTION_KEY to `openssl rand -base64 32` values,
 #            POSTGRES_PASSWORD, and ORIGIN to the URL people will open (http://<host>:3000, or your https domain)
@@ -134,7 +143,7 @@ as owner:
    their per-server roles.
 
 The database lives in the `warcon-db` volume; back it up with `pg_dump`. Migrations apply
-automatically when Warcon starts. Keep `ENCRYPTION_KEY` safe: losing it means re-entering every
+automatically when ReFxRCON starts. Keep `ENCRYPTION_KEY` safe: losing it means re-entering every
 server's RCON password. Never change it after servers are added unless you intend to re-enter them.
 
 ### Behind a reverse proxy or Cloudflare
@@ -168,7 +177,7 @@ rejected as cross-site against the https `ORIGIN`.
 | `ADDRESS_HEADER` / `XFF_DEPTH`                               | unset / `1`        | Behind a proxy: the header carrying the client IP (see above).                                                                                                                    |
 | `PORT` / `HOST`                                              | `3000` / `0.0.0.0` | Listen address.                                                                                                                                                                   |
 | `POLL_SECONDS`                                               | `20`               | Analytics sampling interval per server; `0` disables the poller (and with it triggers and the org list sync, which then only runs when a list is edited or synced by hand).       |
-| `APP_NAME`                                                   | `Warcon`           | Name shown in the UI.                                                                                                                                                             |
+| `APP_NAME`                                                   | `ReFxRCON`         | Name shown in the UI.                                                                                                                                                             |
 | `AUDIT_LOG_READS`                                            | `false`            | Also audit read-only calls (status polls etc.). Noisy.                                                                                                                            |
 | `ALLOW_ORG_SIGNUP`                                           | `false`            | Anyone may create an account and their own organisation at `/sign-up` (3 orgs per person). For hosted, multi-clan instances.                                                      |
 | `MAX_ORGS_PER_USER` / `MAX_SERVERS_PER_ORG`                  | `3` / `10`         | Self-serve limits. The site owner is exempt and can raise the server limit per organisation, or suspend one, from the Orgs page.                                                  |
@@ -402,12 +411,12 @@ at any time; whoever already joined keeps their access until an owner removes th
 
 ### Reaching the game server
 
-Warcon talks to the game's RCON listener over HTTP from its own process, so the panel can run
+ReFxRCON talks to the game's RCON listener over HTTP from its own process, so the panel can run
 anywhere that can reach `Port` (default 7776) on each game host. Enable the listener in
 `ServerSettings.ini` under `[/Script/WDRCON.WDRCONSettings]`, then connect however suits your setup:
 
-- **Direct.** Set `BindAddress=0.0.0.0` (or the host's public address) and add the server in Warcon
-  with scheme `http`. Restrict the port to Warcon's IP in whatever firewall the game host already
+- **Direct.** Set `BindAddress=0.0.0.0` (or the host's public address) and add the server in ReFxRCON
+  with scheme `http`. Restrict the port to the panel's IP in whatever firewall the game host already
   has: the hosting provider's panel, `ufw`, a cloud security group. The RCON password is sent as a
   bearer token on every request, so the firewall is what keeps it private.
 - **Private network.** Over WireGuard, Tailscale, or a provider LAN, bind the listener to the
@@ -435,7 +444,7 @@ Refused targets are recorded on the audit page. The raw action is limited to `/v
 server's own port, and the connectivity test and raw action are rate limited per user.
 
 The ini comments say a non-loopback `BindAddress` expects TLS and `PasswordHash=`; the official web
-console connects over plain `http` regardless, and so can Warcon.
+console connects over plain `http` regardless, and so can ReFxRCON.
 
 ## Local development
 
@@ -443,7 +452,7 @@ Prerequisites: [Bun](https://bun.sh) 1.2+ and a Postgres (the TimescaleDB image 
 
 ```bash
 bun install
-docker run -d --name warcon-pg -p 5432:5432 -e POSTGRES_USER=warcon -e POSTGRES_PASSWORD=warcon \
+docker run -d --name refxrcon-pg -p 5432:5432 -e POSTGRES_USER=warcon -e POSTGRES_PASSWORD=warcon \
   -e POSTGRES_DB=warcon timescale/timescaledb:2.30.0-pg18
 cp .env.example .env      # set the two secrets, ORIGIN=http://localhost:5173, DATABASE_URL=postgres://warcon:warcon@127.0.0.1:5432/warcon
 bun run dev               # http://localhost:5173
@@ -551,7 +560,7 @@ configApply raw` (admin).
   polls in which a match ended lands in whichever match the panel saw next; totals are exact,
   the split between adjacent matches is accurate to one interval. Session rows from before this
   version hold the last raw reading and continue from there.
-- Several Warcon replicas can share one database; a Postgres advisory lock makes exactly one of
+- Several ReFxRCON replicas can share one database; a Postgres advisory lock makes exactly one of
   them the poller.
 - Password hashing is Better Auth's default scrypt, which runs natively via `node:crypto` on Bun.
 - Sessions are looked up in the database on every request (no cookie cache), so disabling a user

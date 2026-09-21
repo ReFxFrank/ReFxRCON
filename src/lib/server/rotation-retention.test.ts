@@ -528,6 +528,80 @@ describe('scoreRotationRetention — degenerate shapes must withhold, not invent
 	});
 });
 
+describe('scoreRotationRetention — the population slope must not eat the map effect', () => {
+	/*
+	 * Rotation is ordered, so a map that always follows the popular map always starts high. That
+	 * makes the starting-population covariate collinear with map identity, and if the slope is
+	 * fitted FIRST -- on raw delta, before the map effects -- it absorbs the map's own effect and
+	 * the map reads as fine.
+	 *
+	 * Measured before the fix, on a map whose true effect was -2.50: no head start -2.49, a
+	 * moderate one -0.44, a strong one -0.09. An 82% attenuation pointing the wrong way about
+	 * the worst map in the rotation. The slope is one block of the alternating fit now, so it is
+	 * identified from within-map variation only.
+	 */
+	function collinear(bias: number, seed = 11): RetentionMatch[] {
+		let s = seed >>> 0;
+		const rand = () => {
+			s = (s * 1664525 + 1013904223) >>> 0;
+			return s / 4294967296;
+		};
+		// `off` is the systematic head start each map gets from its fixed rotation position.
+		const specs = [
+			{ m: 'Follower', eff: -3, off: 8 },
+			{ m: 'Normal1', eff: 0, off: 0 },
+			{ m: 'Normal2', eff: 0, off: 0 },
+			{ m: 'Leader', eff: 1, off: -4 }
+		];
+		const rows: RetentionMatch[] = [];
+		let id = 0;
+		for (let day = 1; day <= 30; day++)
+			for (let k = 0; k < 18; k++) {
+				const sp = specs[k % specs.length];
+				const slot = (k * 7 + day) % 24;
+				const norm = 14 + 10 * Math.exp(-((slot - 20) ** 2) / 40);
+				const ccuStart = Math.max(1, Math.round(norm + sp.off * bias + (rand() - 0.5) * 7));
+				const excess = ccuStart - norm;
+				const d = sp.eff - 0.35 * excess + (rand() - 0.5) * 2.0;
+				rows.push({
+					id: id++,
+					map: sp.m,
+					experiences: null,
+					slot,
+					day: `2026-07-${String(day).padStart(2, '0')}`,
+					ccuStart,
+					ccu10: Math.max(0, Math.round(ccuStart + d)),
+					cap: 64
+				});
+			}
+		return rows;
+	}
+
+	const scoreOf = (bias: number, map: string) =>
+		scoreRotationRetention(collinear(bias), { minMatches: 20 }).maps.find((m) => m.map === map)!
+			.residual as number;
+
+	test('a map with a systematic head start is scored the same as one without', () => {
+		// Truth -3 against an unweighted map mean of -0.5, so the target is -2.50 throughout.
+		for (const bias of [0, 0.5, 1, 2, 3]) {
+			expect(Math.abs(scoreOf(bias, 'Follower') + 2.5)).toBeLessThan(0.2);
+		}
+	});
+
+	test('the head start does not drag the innocent maps either', () => {
+		for (const bias of [0, 1, 3]) {
+			expect(Math.abs(scoreOf(bias, 'Normal1') - 0.5)).toBeLessThan(0.2);
+			expect(Math.abs(scoreOf(bias, 'Leader') - 1.5)).toBeLessThan(0.25);
+		}
+	});
+
+	test('the estimate barely moves as the head start grows', () => {
+		// The regression guard: before the fix this spread was 2.4 players.
+		const scores = [0, 0.5, 1, 2, 3].map((b) => scoreOf(b, 'Follower'));
+		expect(Math.max(...scores) - Math.min(...scores)).toBeLessThan(0.2);
+	});
+});
+
 describe('scoreRotationRetention — the fit must actually converge', () => {
 	/*
 	 * The test the earlier balanced fixtures could not have caught, and the reason they were not
