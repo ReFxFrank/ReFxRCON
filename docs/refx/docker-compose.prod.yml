@@ -39,6 +39,15 @@ services:
       # values written into this file end up in `docker inspect` and in git.
     networks: [web, data]
     # Deliberately no ports:. See the header.
+    #
+    # DO NOT SCALE THIS SERVICE. The rate limiter in src/lib/server/ratelimit.ts is in-process,
+    # and its own header says so: "with several replicas the effective limit is that many times
+    # higher". With D4 on, that limiter is the only thing in front of the public, unauthenticated,
+    # database-backed routes -- so `--scale refxrcon=2` is a security change, not an ops one.
+    # It also resets on every deploy, which is worth knowing before reading a traffic graph.
+    #
+    # The poller is safe to run twice (pg_try_advisory_lock elects one leader and the others idle)
+    # -- but that safety is about double-sampling, not about rate limiting.
 
   db:
     image: timescale/timescaledb:2.30.0-pg18

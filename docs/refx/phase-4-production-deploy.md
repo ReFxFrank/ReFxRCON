@@ -688,6 +688,48 @@ Outbound RCON requests carry a 10-second timeout (`src/lib/server/transport.ts:4
 
 ---
 
+## Decisions that landed on this phase
+
+Two of the register's decisions are now closed, and both create work here rather than just a
+setting.
+
+### D1 — accept the cleartext credential, and rotate
+
+Accepted: the RCON password crosses the internet in cleartext roughly 4,300 times a day per
+server, and it authorises everything. That is a legitimate choice, and it is only legitimate if
+the rotation happens.
+
+- [ ] **Rotate every server's RCON password immediately after setup.** By the time a server is
+      live the password has been through a browser, a terminal and at least one chat message.
+- [ ] **Write the rotation interval down** somewhere that is not a file in this repository.
+      Monthly is a reasonable default; "when we remember" is not an interval.
+- [ ] Confirm the first rotation went through cleanly: one `ok = false` sample at the moment of
+      the change, and sampling resumes on the next tick. No restart is needed.
+
+The full procedure, including the off-schedule triggers and what rotation does *not* fix, is in
+`docs/refx/security.md`.
+
+### D4 — public pages on, everything
+
+Status, leaderboards and career pages are public. There is no environment variable: the switches
+are per-org and per-server in the UI, and **both** levels must be on.
+
+- [ ] Organisation → Features: allow public status, allow public stats.
+- [ ] Server → Features: public status, public stats. Per server, so you can stage it.
+- [ ] **Decide the rate-limit story before announcing the URL**, not after. Measured on this
+      codebase: the routes are cheap (leaderboard 11 ms p50, 29 ms p95 at 10 concurrent on
+      129,614 samples) and the limiter works — but its budget is 120 requests per 60 seconds
+      **per client address**, shared between the JSON routes and the page loads, and the public
+      page polls every 10 seconds. **Twenty-one viewers behind one CGNAT address all get 429s.**
+      Either put a cache in front that honours the status route's `max-age=5`, or raise the limit
+      in `src/lib/server/public.ts`.
+- [ ] Do **not** scale the app container. The limiter is in-process; a second replica doubles the
+      effective limit, and with D4 on it is the only thing in front of unauthenticated,
+      database-backed routes.
+- [ ] Remember it resets on every deploy. A quiet traffic graph after a release may be the
+      buckets clearing rather than the traffic stopping.
+
+
 ## 12. Acceptance criteria
 
 Phase 4 is complete when all of these are true.
@@ -732,7 +774,6 @@ Stop and resolve, rather than proceeding and hoping.
   not. Do not proceed on the strength of a firewall rule; remove the mapping.
 
 ---
-
 ## 14. Day two
 
 ### Log lines worth watching

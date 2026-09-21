@@ -189,18 +189,33 @@ attribution for convenience.
 
 Defaults apply if a decision is never made, so the build never stalls on one.
 
-| #   | Decision                                                                        | Setting                                                        | Status                         |
-| --- | ------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------ |
-| D1  | RCON password crossing the internet in cleartext, or a tunnel from xREALM first | Proceed cleartext; rotate the password immediately after setup | **Open — decide deliberately** |
-| D2  | VPS provider and specs                                                          | 2 vCPU / 4 GB RAM / 60 GB NVMe                                 | Open                           |
-| D3  | Panel hostname                                                                  | `stats.refx.gg`                                                | Open                           |
-| D4  | Public player-facing stats pages                                                | Off at launch; enable per server once the data is trusted      | Open                           |
-| D5  | Steam Web API key                                                               | Yes — without it there are no persona names, only SteamID64s   | Open                           |
-| D6  | Discord OAuth sign-in for admins                                                | Password accounts at launch; add Discord in Phase 4            | Open                           |
-| D7  | `EMAIL_SUFFIX` domain                                                           | **`@refx.gg`** — settled, applied in `auth.ts`                 | **Closed**                     |
-| D8  | Sample retention window                                                         | 90 days via the TimescaleDB retention policy                   | Open                           |
-| D9  | Poll interval per server                                                        | 20 s (shipped default; floor 5 s)                              | Open                           |
-| D10 | WARDOGS servers at launch                                                       | Whatever is live; per-org cap is 10                            | Open                           |
+| #   | Decision                                      | Setting                                                               | Status                |
+| --- | --------------------------------------------- | --------------------------------------------------------------------- | --------------------- |
+| D1  | RCON password in cleartext, or a tunnel first | **Accept and rotate on a schedule** — see `docs/refx/security.md`     | **Closed**            |
+| D2  | VPS provider and specs                        | 2 vCPU / 4 GB RAM / 60 GB NVMe. 4 GB is the Docker build, not runtime | Open (default stands) |
+| D3  | Panel hostname                                | **`stats.refx.gg`** — baked into the Caddyfile and the env template   | **Closed**            |
+| D4  | Public player-facing stats pages              | **On, everything** — status, leaderboards and careers                 | **Closed**            |
+| D5  | Steam Web API key                             | Yes — persona, avatar, account age, VAC and game bans                 | Open (default stands) |
+| D6  | Discord OAuth sign-in for admins              | Password accounts at launch; add Discord in Phase 4                   | Open (default stands) |
+| D7  | `EMAIL_SUFFIX` domain                         | **`@refx.gg`** — applied in `auth.ts`                                 | **Closed**            |
+| D8  | Sample retention window                       | 90 days (`SAMPLE_RETENTION_DAYS`)                                     | Open (default stands) |
+| D9  | Poll interval per server                      | **20 s** — 6.4 requests/min/server, measured                          | **Closed**            |
+| D10 | WARDOGS servers at launch                     | Whatever is live; per-org cap is 10                                   | Open (default stands) |
+
+**D1 is closed: accept and rotate.** The RCON password crosses the internet in cleartext roughly
+4,300 times a day per server, and it authorises everything. That is an accepted risk now, not an
+unexamined one, and it comes with an obligation: **rotate the password after initial setup and on
+a fixed schedule thereafter.** The procedure is in `docs/refx/security.md`. Raising `POLL_SECONDS`
+is not a mitigation — one interception is enough.
+
+**D4 is closed: public pages on, everything.** That puts unauthenticated, database-backed routes
+on the internet behind an **in-process** rate limiter. Measured on this codebase with 129,614
+samples: a served leaderboard is 11 ms p50 / 29 ms p95, so load is not the concern. The concern
+is the budget's shape — 120 requests per 60 seconds **per client address**, shared between the
+JSON routes _and_ the public page loads. The public page polls every 10 seconds, so **21 or more
+viewers sharing one public IP all get 429s**. Behind CGNAT, a mobile carrier or a university
+network that is an ordinary Saturday. Put a cache in front that respects the status route's
+`max-age=5`, or raise the limit in `src/lib/server/public.ts`. See `docs/refx/security.md`.
 
 **D7 is closed and was irreversible.** Accounts key off `EMAIL_SUFFIX`; changing it after
 the first account exists is a data migration, not a rename. It is `@refx.gg`. These

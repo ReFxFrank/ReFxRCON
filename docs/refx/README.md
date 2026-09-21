@@ -40,7 +40,7 @@ Phases 1, 3 and 5 are not runbooks because they are done. What they left behind:
 
 | | |
 | --- | --- |
-| [`security.md`](security.md) | The posture, and **D1** — a full-access credential in cleartext 4,300 times a day per server. The one decision worth making deliberately. |
+| [`security.md`](security.md) | The posture; **D1** (accepted — with the rotation procedure that acceptance obliges); and the measured rate-limit numbers behind **D4** |
 | [`rotation-retention.md`](rotation-retention.md) | What the retention number means, what it does not, and how to check it |
 | [`rotation-retention.sql`](rotation-retention.sql) | A second, independent implementation of that analytic, for reconciling the panel by hand |
 
@@ -59,6 +59,17 @@ Copy these into place; they are not wired up automatically.
 The decryption check inside `restore-test.sh` was verified against real encrypted rows in a live
 database: it recovers the plaintext correctly. The Docker orchestration around it was not — there
 was no Docker daemon available.
+
+## Decisions, as they stand
+
+| # | Decision | Status |
+| --- | --- | --- |
+| D1 | RCON password in cleartext | **Closed — accept and rotate.** Creates an obligation: rotate after setup and on a written schedule (`security.md`) |
+| D3 | Hostname | **Closed — `stats.refx.gg`.** Already in the Caddyfile and the env template |
+| D4 | Public stats pages | **Closed — on, everything.** Read the measured rate-limit numbers in `security.md` before announcing the URL |
+| D7 | `EMAIL_SUFFIX` | **Closed — `@refx.gg`.** Was irreversible; applied before any account existed |
+| D9 | Poll interval | **Closed — 20 s.** 6.4 requests/min/server, measured |
+| D2, D5, D6, D8, D10 | VPS specs, Steam key, Discord OAuth, retention, server count | Open, running on their defaults. None of them block a deploy |
 
 ## The three things most likely to bite
 

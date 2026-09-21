@@ -20,7 +20,16 @@ positioned to read that traffic — a compromised router, a hostile network oper
 shared segment at either end — has full control of the game server, permanently, and nothing in
 this panel can detect it.
 
-This is decision **D1**, and it is the one worth making deliberately rather than by default.
+This is decision **D1**. **It is decided: accept and rotate.**
+
+That is a legitimate choice — it is the option the brief lists third, and it is the one most
+people take because the alternatives need xREALM's cooperation. But it is only legitimate if the
+rotation actually happens. An accepted risk with no rotation schedule is an unexamined risk with
+extra paperwork. See "Rotating an RCON password" below, and put the schedule somewhere that is
+not this file.
+
+If xREALM ever offers a tunnel or a TLS proxy, take it — this decision is cheap to revisit, and
+the options below stay here for that day.
 
 ### Options, best first
 
@@ -95,6 +104,89 @@ the target flips the flag anyway — saving it is taken as vouching for it.
 
 For `host.docker.internal`, also uncomment the `extra_hosts` line in the compose file. It usually
 resolves to `172.17.0.1`, which is private, so the site-owner step is still required.
+
+## Rotating an RCON password
+
+D1 is accepted on the condition that this happens. The panel makes it a two-minute job, and
+nothing is lost while it runs.
+
+**Rotate immediately after initial setup.** By the time a server is live the password has been
+typed into a browser, a terminal, and — in practice — at least one chat message. The first
+rotation is the one that retires all of those.
+
+**Then on a schedule.** Monthly is a reasonable default for a community server. Quarterly is
+defensible. "When we remember" is not a schedule.
+
+1. Change the password on the game server, through xREALM's own tooling.
+2. In the panel: **Servers → the server → edit → Password**, and save. It is encrypted with
+   AES-256-GCM under `ENCRYPTION_KEY` before it touches the database, and never sent back to a
+   browser.
+3. The poller picks it up on its next tick — no restart, no downtime. A tick that lands in the
+   gap between steps 1 and 2 fails, writes one `ok = false` sample, and recovers on the next
+   one. That is a single point on the population chart, not an outage.
+4. Check the audit log: the edit is attributed to whoever made it.
+
+**Also rotate, off-schedule, whenever:**
+
+- someone with `admin` on that server leaves the team,
+- the password appears in a chat log, a screenshot, a support ticket or a bug report,
+- you change hosting, or xREALM migrates the server,
+- anything about the VPS looks wrong.
+
+**What rotation does not fix.** Anyone who captured the old password had full control for as long
+as it was valid, and could have used it to add their own ban entries, change the config, or read
+the ban list. Rotation stops future use; it does not undo past use. If you suspect interception
+rather than mere exposure, read the audit log **on the game server** as well as in the panel — the
+panel only records commands issued through the panel.
+
+## The public surface, now that D4 is on
+
+D4 is decided: status, leaderboards and career pages are public. That puts unauthenticated,
+database-backed routes on the internet, so here is what is actually in front of them, measured
+against this codebase with 129,614 samples and 2,163 matches.
+
+**Load is not the problem.** Served costs, at 10 concurrent requests:
+
+| Route | p50 | p95 |
+| --- | --- | --- |
+| `/api/public/servers/{id}/status` | 5 ms | 132 ms |
+| `/api/public/servers/{id}/leaderboard` | 11 ms | 29 ms |
+| `/public/{id}/stats` (the page) | 8 ms | 49 ms |
+
+**The limiter works.** A 150-request burst from one address returned 115 × 200 and 35 × 429,
+which is the 120-per-60-seconds budget doing its job. A rejected request costs about 2 ms,
+because the limiter sits in front of the database.
+
+**The budget's shape is the problem.** Those 120 requests per 60 seconds are counted **per client
+address**, and they are shared between the public JSON routes *and* the public page loads — a
+burst against the leaderboard leaves nothing for the stats page, which is exactly what the
+measurement showed. The public page polls every **10 seconds**:
+
+| Viewers sharing one public IP | Requests/min | Result |
+| --- | --- | --- |
+| 10 | 60 | fine |
+| 20 | 120 | at the ceiling |
+| 25 | 150 | **every one of them gets 429s** |
+| 40 | 240 | **every one of them gets 429s** |
+
+Behind CGNAT, a mobile carrier, a university network, or one town's ISP, twenty-one concurrent
+viewers is an ordinary Saturday — and the failure is indiscriminate, hitting everyone on that
+address at once.
+
+**Two fixes, either is enough:**
+
+1. **A cache in front.** The status route already sends `cache-control: public, max-age=5` and has
+   a matching 5-second in-process cache, so a CDN that honours it collapses any number of viewers
+   into one origin request per 5 seconds — and cached responses never reach the limiter at all.
+   Cloudflare's free tier does this. Respect the 5 seconds and nothing longer; the other public
+   routes are `no-store` and must not be cached.
+2. **Raise the limit.** `publicRate` in `src/lib/server/public.ts` is `120, 60_000`. Given the
+   measured per-request costs, several times that is affordable. Change it deliberately, with the
+   numbers above in view, rather than reactively when people complain.
+
+**And the two standing caveats.** The limiter is in-process: it **resets on every deploy**, and a
+second replica **doubles** the effective limit. `docker-compose.prod.yml` runs one app container
+for that reason — scaling it is a security decision, not an ops one.
 
 ## Rate limiting is per process
 

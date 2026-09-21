@@ -65,6 +65,23 @@ stats.refx.gg {
 	# change to make deliberately and test, not a line to paste in: the panel inlines SvelteKit's
 	# hydration data and would need a nonce or hash to keep working.
 
+	# D4 is on: status, leaderboards and career pages are public. The status route sends
+	# `cache-control: public, max-age=5` and has a matching 5-second in-process cache, so a cache
+	# in front collapses any number of viewers into one origin request per 5 seconds -- and a
+	# cached response never reaches the rate limiter at all.
+	#
+	# That matters more than it sounds. The limiter's budget is 120 requests per 60 seconds PER
+	# CLIENT ADDRESS, shared between the public JSON routes and the public page loads, and the
+	# public page polls every 10 seconds. Twenty-one viewers behind one CGNAT address, one mobile
+	# carrier or one campus network therefore all get 429s at once.
+	#
+	# Caddy's standard build has no cache. Two ways to get one:
+	#   * put Cloudflare (free tier is enough) in front, which honours max-age -- then also set
+	#     ADDRESS_HEADER=cf-connecting-ip, or XFF_DEPTH=2, or the client IP becomes Cloudflare's
+	#   * build Caddy with the cache-handler plugin via xcaddy
+	# Respect the 5 seconds and nothing longer: every other public route is `no-store` and must
+	# not be cached. The alternative is raising the limit in src/lib/server/public.ts.
+
 	log {
 		output file /var/log/caddy/refxrcon.log {
 			roll_size 20MiB
