@@ -66,6 +66,8 @@ services:
       - '443:443'
       - '443:443/udp' # HTTP/3
     volumes:
+      # docs/refx/Caddyfile, whose upstream is `refxrcon:3000` -- the service name above. If you
+      # move Caddy to the host, that line becomes 127.0.0.1:3000 and the app needs its ports back.
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data # certificates and ACME account. Losing this means re-issuing.
       - caddy-config:/config

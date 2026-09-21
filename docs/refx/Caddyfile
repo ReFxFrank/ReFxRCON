@@ -16,11 +16,15 @@
 stats.refx.gg {
 	encode zstd gzip
 
-	# The app listens on the Docker network only. If this line says 127.0.0.1 you are relying on
-	# the firewall to keep port 3000 private; if it says the container name you are relying on
-	# Docker's network, which is the stronger guarantee. Use the compose service name when Caddy
-	# runs in the same compose project, and 127.0.0.1:3000 when Caddy is on the host.
-	reverse_proxy 127.0.0.1:3000 {
+	# `refxrcon` is the service name in docs/refx/docker-compose.prod.yml, where Caddy runs in the
+	# same project and the app publishes no ports at all. That is the stronger arrangement: the
+	# app is unreachable except across Docker's network, rather than reachable on 127.0.0.1 and
+	# kept private by a firewall rule somebody can later "fix".
+	#
+	# Running Caddy on the host instead? Then use 127.0.0.1:3000 here, and add
+	# `ports: ['127.0.0.1:3000:3000']` back to the app service -- binding to 127.0.0.1
+	# explicitly, never to 0.0.0.0, which is what the repository's development compose does.
+	reverse_proxy refxrcon:3000 {
 		# Caddy appends the immediate peer to X-Forwarded-For. With Caddy as the only proxy, the
 		# real client is therefore the LAST entry, which is what XFF_DEPTH=1 selects -- the app
 		# indexes from the end of the list, 1-based, not from the left.
