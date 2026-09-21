@@ -41,6 +41,18 @@
 	/* Blue-tinted hairline. Replaces the old `border-black`, which was a raw Tailwind built-in
 	 * encoding the hard-edge idiom; glass wants a light edge, not a dark one. */
 	--color-edge: rgb(148 180 255 / 0.1);
+	/*
+	 * Diverging pair for charts that encode polarity (rotation retention). NOT the danger/ok
+	 * pair: red against green fails colour-vision separation outright -- deuteranopia delta-E
+	 * 3.3 against a target of 8, i.e. indistinguishable to a reader with the commonest form of
+	 * colour blindness. These are the same OKLCH hue and chroma as `danger` and `accent`, with
+	 * lightness re-stepped into the 0.48-0.67 band a dark chart surface wants (the text tokens
+	 * sit at 0.72-0.77 because they are tuned for contrast, which is a different job). The pair
+	 * clears lightness band, chroma floor, CVD separation (16.9 protan), normal-vision floor
+	 * and contrast against the panel.
+	 */
+	--color-chart-bleed: #e45267;
+	--color-chart-gain: #568ed4;
 	--color-lilac: #7db7ff; /* legacy alias: accent text (zero call sites, kept for compatibility) */
 	--color-ok: #5ec98a;
 	--color-warn: #e3a94a;

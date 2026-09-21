@@ -6,8 +6,10 @@
 	import Badge from '$lib/components/Badge.svelte';
 	import PopulationChart from '$lib/components/PopulationChart.svelte';
 	import CashChart from '$lib/components/CashChart.svelte';
+	import RotationRetentionChart from '$lib/components/RotationRetentionChart.svelte';
 	import { factionColor } from '$lib/format';
 	import type { Analytics, Range } from '$lib/server/analytics';
+	import type { RetentionRange, RotationRetention } from '$lib/server/rotation-retention';
 	import type { PageProps } from './$types';
 
 	let { data }: PageProps = $props();
@@ -17,6 +19,10 @@
 	let loading = $state(false);
 	let view = $state<'chart' | 'table'>('chart');
 	let cashView = $state<'chart' | 'table'>('chart');
+	// Retention needs a far longer window than a population chart, so it carries its own.
+	let retRange = $state<RetentionRange>('30d');
+	let ret = $state<RotationRetention | null>(null);
+	let retView = $state<'chart' | 'table'>('chart');
 
 	async function load() {
 		loading = true;
@@ -35,6 +41,28 @@
 		range;
 		return poll(load, 60000);
 	});
+
+	async function loadRetention() {
+		try {
+			ret = await api<RotationRetention>(
+				'GET',
+				`/api/servers/${encodeURIComponent(id)}/rotation-retention?range=${retRange}`
+			);
+		} catch (err) {
+			toast(errorMessage(err), 'err');
+		}
+	}
+	// Five minutes: a match takes longer than that, so nothing can change faster.
+	$effect(() => {
+		retRange;
+		return poll(loadRetention, 300000);
+	});
+
+	const RET_RANGES: { key: RetentionRange; label: string }[] = [
+		{ key: '7d', label: '7 days' },
+		{ key: '30d', label: '30 days' },
+		{ key: '90d', label: '90 days' }
+	];
 
 	const RANGES: { key: Range; label: string }[] = [
 		{ key: '24h', label: '24 hours' },
@@ -189,6 +217,73 @@
 				<div class="text-mist-600">No data yet.</div>
 			{/if}
 		</div>
+	</div>
+
+	<div class="panel mb-4">
+		<div class="mb-3 flex flex-wrap items-start gap-2">
+			<div>
+				<span class="label-sm mb-1">Rotation retention</span>
+				<span class="text-[12.5px] text-mist-600">
+					players gained or lost over a map's first {ret?.horizonMinutes ?? 10} minutes, against the average
+					map in this rotation
+				</span>
+			</div>
+			<div class="ml-auto flex flex-wrap items-center gap-2">
+				<div class="join">
+					{#each RET_RANGES as r (r.key)}
+						<button
+							class="btn btn-sm {retRange === r.key ? 'btn-primary' : ''}"
+							onclick={() => (retRange = r.key)}>{r.label}</button
+						>
+					{/each}
+				</div>
+				<div class="join">
+					<button
+						class="btn btn-sm {retView === 'chart' ? 'btn-primary' : ''}"
+						onclick={() => (retView = 'chart')}>Chart</button
+					>
+					<button
+						class="btn btn-sm {retView === 'table' ? 'btn-primary' : ''}"
+						onclick={() => (retView = 'table')}>Table</button
+					>
+				</div>
+			</div>
+		</div>
+
+		{#if ret}
+			<RotationRetentionChart
+				maps={ret.maps}
+				minMatches={ret.minMatches}
+				horizonMinutes={ret.horizonMinutes}
+				view={retView}
+				label={(m) => mapLabel(data.catalog, m)}
+			/>
+			<p class="note">
+				{#if ret.eligible}
+					{ret.eligible} match{ret.eligible === 1 ? '' : 'es'} scored over {ret.windowDays} days. Across
+					all of them the server {ret.grandMeanDelta === null
+						? 'held steady'
+						: ret.grandMeanDelta < 0
+							? `lost ${Math.abs(ret.grandMeanDelta).toFixed(2)} players`
+							: `gained ${ret.grandMeanDelta.toFixed(2)} players`} in the first
+					{ret.horizonMinutes} minutes of a match. Residuals are measured against the average map here,
+					so they sum to zero and rank maps against each other; if every map bleeds, that number above
+					is what says so, not the bars.
+				{:else}
+					No matches scored yet.
+				{/if}
+				{#if ret.excluded.total}
+					{ret.excluded.total} excluded: {ret.excluded.noStartReading} with no reading at the start,
+					{ret.excluded.noHorizonReading} with none at {ret.horizonMinutes} minutes,
+					{ret.excluded.atCapacity} starting above 90% of capacity (a full server cannot grow), and
+					{ret.excluded.noCapacity} where the server reported no player cap.
+				{/if}
+				Matches are attributed by map only. A rotation entry changes map, experience and lighting together,
+				so a map's score may really belong to its experience. Intervals describe sampling noise, not cause.
+			</p>
+		{:else}
+			<div class="text-mist-600">Loading…</div>
+		{/if}
 	</div>
 
 	<div class="panel mb-4">
