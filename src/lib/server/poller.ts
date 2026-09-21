@@ -40,7 +40,16 @@ import { cashByFaction } from '$lib/cash';
 
 export { pollSeconds };
 
-const SAMPLE_RETENTION_DAYS = 90;
+/*
+ * D8. Must match the TimescaleDB policy in drizzle/0016_sample_retention_120_days.sql -- on
+ * plain Postgres this constant is the ONLY thing pruning samples, and on TimescaleDB the two
+ * run independently, so a mismatch means one of them is dead code.
+ *
+ * 120 and not 90 because the analytics panels offer a 90-day window; at 90-day retention its far
+ * end was always being pruned out from under it. Costs about 125 MB at four servers and a 20s
+ * poll (measured: 240 bytes per row including indexes).
+ */
+const SAMPLE_RETENTION_DAYS = 120;
 const SESSION_RETENTION_DAYS = 365;
 /** Close open sessions after this many consecutive failed polls. */
 const OFFLINE_AFTER_FAILURES = 3;

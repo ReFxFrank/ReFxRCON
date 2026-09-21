@@ -60,16 +60,31 @@ The decryption check inside `restore-test.sh` was verified against real encrypte
 database: it recovers the plaintext correctly. The Docker orchestration around it was not — there
 was no Docker daemon available.
 
-## Decisions, as they stand
+## Decisions — all ten closed
 
-| # | Decision | Status |
+| # | Decision | Where it landed |
 | --- | --- | --- |
-| D1 | RCON password in cleartext | **Closed — accept and rotate.** Creates an obligation: rotate after setup and on a written schedule (`security.md`) |
-| D3 | Hostname | **Closed — `stats.refx.gg`.** Already in the Caddyfile and the env template |
-| D4 | Public stats pages | **Closed — on, everything.** Read the measured rate-limit numbers in `security.md` before announcing the URL |
-| D7 | `EMAIL_SUFFIX` | **Closed — `@refx.gg`.** Was irreversible; applied before any account existed |
-| D9 | Poll interval | **Closed — 20 s.** 6.4 requests/min/server, measured |
-| D2, D5, D6, D8, D10 | VPS specs, Steam key, Discord OAuth, retention, server count | Open, running on their defaults. None of them block a deploy |
+| D1 | Cleartext RCON credential | **Accept and rotate.** Creates an obligation: rotate after setup and on a written interval (`security.md`) |
+| D2 | VPS specs | **2 vCPU / 4 GB / 60 GB.** 4 GB is the Docker build; runtime is near idle |
+| D3 | Hostname | **`stats.refx.gg`** — in the Caddyfile, the env template and the Discord redirect |
+| D4 | Public stats pages | **On, everything.** Read the measured rate-limit numbers in `security.md` before announcing the URL |
+| D5 | Steam Web API key | **Yes.** Buys account age and VAC/game bans — not names, which `/v1/players` already returns |
+| D6 | Admin sign-in | **Discord from the start.** Password accounts keep working alongside it |
+| D7 | `EMAIL_SUFFIX` | **`@refx.gg`.** Was irreversible; applied before any account existed |
+| D8 | Sample retention | **120 days**, not upstream's 90 — so the panels' 90-day window is honest. Code change, shipped |
+| D9 | Poll interval | **20 s.** 6.4 requests/min/server, measured |
+| D10 | Server count | **Moot.** At 6.4 req/min/server the per-org cap of 10 is 64/min; a 120/min limit needs ~19 servers |
+
+Three of them created work rather than a setting, and that work is done: the rotation procedure
+and its Phase 4 checklist (D1), the public-surface measurements and the no-scale constraint (D4),
+and migration `0016_sample_retention_120_days.sql` with the matching poller constant (D8).
+
+**Two still need something from you**, and neither can be done from here:
+
+- **D1** — pick a rotation interval and write it somewhere that is not this repository, then
+  rotate every server's password once immediately after setup.
+- **D5 / D6** — provision the Steam API key and the Discord application. Both are env vars in
+  `env.production.example`, with the exact steps beside them.
 
 ## The three things most likely to bite
 

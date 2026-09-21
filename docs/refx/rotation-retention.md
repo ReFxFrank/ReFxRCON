@@ -203,10 +203,15 @@ residual, count and interval; both recovered the seeded truth to within 0.07 pla
 
 ## Windows and retention
 
-The default window is 30 days. `samples` are pruned at 90 days (`SAMPLE_RETENTION_DAYS`), so
-the 90-day option only works while that retention holds — **D8 makes retention a tunable, and
-lowering it below about 32 days silently truncates the 30-day window from the far end rather
-than erroring.**
+The default window is 30 days. `samples` are pruned at **120 days** (`SAMPLE_RETENTION_DAYS`,
+matched by `drizzle/0016_sample_retention_120_days.sql`), which is D8 and is why the 90-day
+option is honest: it has a month of margin rather than being pruned out from under itself, as it
+was at the upstream 90.
+
+**Lowering retention below about 32 days silently truncates even the 30-day window from the far
+end rather than erroring.** If you change it, change it in both places — on plain Postgres the
+poller constant is the only thing pruning; on TimescaleDB the two run independently, so a
+mismatch leaves one of them dead.
 
 `matches` are kept for 365 days, but a match without samples either side of it cannot be scored,
 so sample retention is the binding constraint.

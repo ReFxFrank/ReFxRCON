@@ -113,6 +113,13 @@
       "when": 1789575173703,
       "tag": "0015_server_join_code",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789971055075,
+      "tag": "0016_sample_retention_120_days",
+      "breakpoints": true
     }
   ]
 }
